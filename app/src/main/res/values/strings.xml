@@ -1,0 +1,155 @@
+<resources>
+    <string name="app_name">TripPilot</string>
+    <string name="app_tagline">Smart Driver Assistant</string>
+    <string name="accessibility_service_desc">TripPilot Accessibility Service detects incoming ride offers on supported driver apps (Bharat Taxi, Rapido) and automates evaluation and acceptance according to your configured filters.</string>
+
+    <!-- Navigation Tabs -->
+    <string name="tab_dashboard">Dashboard</string>
+    <string name="tab_filters">Filters</string>
+    <string name="tab_apps">Apps</string>
+    <string name="tab_history">History</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- Onboarding & Disclaimer -->
+    <string name="onboarding_title_1">Smart Ride Detection</string>
+    <string name="onboarding_desc_1">TripPilot reads incoming ride offers in real-time from Bharat Taxi and Rapido right on your screen.</string>
+    <string name="onboarding_title_2">Your Rules, Your Profit</string>
+    <string name="onboarding_desc_2">Set minimum fare, maximum pickup and drop distances, and preferred locations to filter out unprofitable trips.</string>
+    <string name="onboarding_title_3">Instant Action</string>
+    <string name="onboarding_desc_3">Choose between automatic 1-tap accept or instant notify-only alerts before the countdown timer runs out.</string>
+    <string name="disclaimer_text">Automating actions in other apps may violate their terms and can lead to account restrictions. Use at your own risk.</string>
+    <string name="btn_understand">I understand</string>
+
+    <!-- Dashboard -->
+    <string name="service_running">Service Running</string>
+    <string name="service_stopped">Service Stopped</string>
+    <string name="tap_to_start">Tap to start</string>
+    <string name="tap_to_stop">Tap to stop</string>
+    <string name="grant_permissions_first">Grant permissions first</string>
+    <string name="mode_auto_accept">Auto-accept</string>
+    <string name="mode_notify_only">Notify only</string>
+    <string name="driver_apps_status">Driver Apps Status</string>
+    <string name="detection_idle">Idle</string>
+    <string name="detection_watching">Watching</string>
+    <string name="detection_offer_detected">Offer detected</string>
+    <string name="detection_not_recognized">Offer screen not recognized — capture the screen tree in Developer tools</string>
+    <string name="service_stopped_hint">Service is currently stopped. Turn on the service switch to start.</string>
+    <string name="lang_info_banner">Keep your driving app\'s language set to English for reliable detection.</string>
+    <string name="fare_filter_card">Quick Fare Filter</string>
+    <string name="min_fare_label">Minimum Fare (₹)</string>
+    <string name="max_fare_label">Maximum Fare (₹)</string>
+    <string name="unlimited">Unlimited</string>
+    <string name="save_filter">Save Filter</string>
+    <string name="filter_saved">Filter Saved ✓</string>
+    <string name="alert_on_accept">Alert on Accept</string>
+    <string name="play_sound_vibrate">Play sound and vibrate on ride accept</string>
+    <string name="permissions_card">Required Permissions</string>
+
+    <!-- Permissions -->
+    <string name="perm_accessibility">Accessibility Service</string>
+    <string name="perm_accessibility_desc">Required to read offer details and accept rides</string>
+    <string name="perm_overlay">Display over other apps</string>
+    <string name="perm_overlay_desc">Required to show notify alerts and simulator</string>
+    <string name="perm_notifications">Notifications</string>
+    <string name="perm_notifications_desc">Required to run foreground service and alerts</string>
+    <string name="perm_battery">Battery optimization</string>
+    <string name="perm_battery_desc">Ignore optimizations so service won\'t get killed</string>
+    <string name="perm_restricted_settings">Allow restricted settings</string>
+    <string name="perm_restricted_settings_desc">Required on Android 13+ for sideloaded accessibility apps</string>
+
+    <!-- Filters Screen -->
+    <string name="distance_filter">Distance Filter</string>
+    <string name="pickup_dist_min">Pickup Distance Min (km)</string>
+    <string name="pickup_dist_max">Pickup Distance Max (km)</string>
+    <string name="drop_dist_min">Drop Distance Min (km)</string>
+    <string name="drop_dist_max">Drop Distance Max (km)</string>
+    <string name="fare_settings">Fare Calculation</string>
+    <string name="fare_used_for_filters">Fare used for filters</string>
+    <string name="fare_base_only">Base only</string>
+    <string name="fare_base_extra">Base + Extra</string>
+    <string name="min_fare_per_km">Min fare per km (₹/km)</string>
+    <string name="location_filter">Location Filter</string>
+    <string name="location_keyword_hint">Keyword (e.g. Navi Mumbai, Airport)</string>
+    <string name="filter_accept">Accept ✓</string>
+    <string name="filter_reject">Reject ✗</string>
+    <string name="add_filter">Add Filter</string>
+    <string name="allowed_ride_types">Allowed Ride Types</string>
+    <string name="when_several_rides_match">When several rides match</string>
+    <string name="strategy_first_top">First match from top</string>
+    <string name="strategy_highest_fare">Highest fare</string>
+    <string name="strategy_highest_per_km">Highest fare per km</string>
+    <string name="strategy_nearest_pickup">Nearest pickup</string>
+    <string name="rule_summary_title">Active Rules Preview</string>
+
+    <!-- Apps Screen -->
+    <string name="installed_target_apps">Installed Target Apps</string>
+    <string name="target_apps_helper">TripPilot actively monitors these supported Indian driver applications when foregrounded.</string>
+    <string name="status_active">Auto-Accept Active</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_not_installed">Not installed</string>
+    <string name="change_app">Change app</string>
+    <string name="open_app">Open App</string>
+    <string name="select_driver_app">Select Driver App</string>
+
+    <!-- History Screen -->
+    <string name="history_title">Ride History</string>
+    <string name="stats_today">Today\'s Stats</string>
+    <string name="stat_accepted">Accepted</string>
+    <string name="stat_skipped">Skipped</string>
+    <string name="stat_total_fare">Total Fare</string>
+    <string name="filter_all">All</string>
+    <string name="filter_tap_failed">Tap failed</string>
+    <string name="search_address_hint">Search by pickup or destination address…</string>
+    <string name="pickup_location">Pickup</string>
+    <string name="drop_location">Destination</string>
+    <string name="address_truncated">Address truncated on screen</string>
+    <string name="skip_reason">Skip Reason</string>
+    <string name="clear_all">Clear All</string>
+    <string name="export_csv">Export CSV</string>
+    <string name="no_rides_logged">No rides logged yet</string>
+    <string name="no_rides_desc">Ride offers detected while service is active will appear here with full destination details.</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="language">Language</string>
+    <string name="theme">Theme</string>
+    <string name="sound_vibration">Sound &amp; Vibration</string>
+    <string name="keep_screen_on">Keep screen on</string>
+    <string name="process_test_requests">Process test requests</string>
+    <string name="tap_method">Tap method</string>
+    <string name="show_debug_info">Show debug info</string>
+    <string name="reset_filters">Reset all filters</string>
+    <string name="setup_guide">Setup Guide</string>
+    <string name="developer_tools">Developer Tools</string>
+    <string name="screen_inspector">Screen Inspector</string>
+    <string name="simulator">Offer Simulator</string>
+    <string name="about_trippilot">About TripPilot</string>
+    <string name="version_label">Version 1.0.0 (Build 1)</string>
+
+    <!-- Auth -->
+    <string name="sign_in">Sign In</string>
+    <string name="sign_up">Sign Up</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="email_hint">Email address</string>
+    <string name="password_hint">Password</string>
+    <string name="confirm_password_hint">Confirm password</string>
+    <string name="full_name_hint">Full name</string>
+    <string name="agree_terms">I agree to the Terms of Service &amp; Privacy Policy</string>
+    <string name="dont_have_account">Don\'t have an account? Sign Up</string>
+    <string name="already_have_account">Already have an account? Sign In</string>
+    <string name="connect_with_us">Connect with us</string>
+    <string name="reset_link_sent">Password reset email sent successfully.</string>
+    <string name="send_reset_link">Send Reset Link</string>
+    <string name="continue_offline">Continue in Offline / Local Mode</string>
+
+    <!-- Profile -->
+    <string name="profile_title">Driver Profile</string>
+    <string name="active_status">Active</string>
+    <string name="expired_status">Expired</string>
+    <string name="subscription_plan">Subscription Plan</string>
+    <string name="renew_plan">Renew Subscription</string>
+    <string name="how_to_use">How to Use</string>
+    <string name="change_email">Change Email</string>
+    <string name="change_password">Change Password</string>
+    <string name="sign_out">Sign Out</string>
+</resources>

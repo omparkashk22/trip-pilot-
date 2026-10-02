@@ -1,0 +1,6 @@
+{
+  "name": "TripPilot",
+  "description": "Smart ride offer filter and auto-accept utility for Indian driver apps with screen inspection and ride logging.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

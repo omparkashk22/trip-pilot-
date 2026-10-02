@@ -1,0 +1,26 @@
+[
+  {
+    "appId": "bharat_taxi",
+    "displayName": "Bharat Taxi",
+    "candidatePackages": [],
+    "labelKeywords": ["bharat taxi driver", "bharat taxi partner", "bharat taxi"],
+    "excludePackages": [],
+    "fareRegex": "₹\\s*([0-9][0-9,]*(\\.[0-9]+)?)",
+    "distanceTimeRegex": "([0-9]+(\\.[0-9]+)?)\\s*(km|m)\\s*[·•.\\-]\\s*([0-9]+)\\s*(min|mins)",
+    "acceptTexts": ["Accept", "स्वीकार करें"],
+    "neverClickTexts": ["+10", "+20", "+30", "X", "More requests", "अधिक अनुरोध"],
+    "detectionHints": ["Accept", "₹"]
+  },
+  {
+    "appId": "rapido",
+    "displayName": "Rapido",
+    "candidatePackages": ["com.rapido.rider"],
+    "labelKeywords": ["rapido captain", "rapido"],
+    "excludePackages": ["com.rapido.passenger"],
+    "fareRegex": "₹\\s*([0-9][0-9,]*(\\.[0-9]+)?)\\s*(\\+\\s*₹\\s*([0-9][0-9,]*(\\.[0-9]+)?))?",
+    "distanceRegex": "([0-9]+(\\.[0-9]+)?)\\s*(km|m)\\b",
+    "acceptTexts": ["Accept", "स्वीकार करें"],
+    "neverClickTexts": ["-", "Go To", "Stay In", "Extra from Customer"],
+    "detectionHints": ["Accept", "₹", "Go To", "Stay In"]
+  }
+]
