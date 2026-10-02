@@ -33,6 +33,17 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
     val isNewKeywordAccept = MutableStateFlow(true) // true = Accept, false = Reject
     val locationKeywords = MutableStateFlow<List<LocationKeyword>>(emptyList())
 
+    // Ride Types grouped by app
+    val bharatTaxiRideTypes = MutableStateFlow(
+        listOf("Cab Economy", "Cab Premium", "Economy Intercity", "Premium Intercity")
+    )
+    val rapidoRideTypes = MutableStateFlow(
+        listOf("Bike Boost", "Bike", "Auto", "Cab")
+    )
+
+    val customRideTypeInput = MutableStateFlow("")
+    val selectedAppForCustomType = MutableStateFlow("bharat_taxi") // "bharat_taxi" or "rapido"
+
     val allowedRideTypes = MutableStateFlow<Set<String>>(emptySet())
     val multipleMatchStrategy = MutableStateFlow("first_match")
 
@@ -41,8 +52,6 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
-
-    val availableRideTypes = listOf("Bike", "Bike Boost", "Auto", "Cab", "Bike Lite", "Bharat Taxi")
 
     init {
         viewModelScope.launch {
@@ -61,6 +70,18 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
 
                 allowedRideTypes.value = f.allowedRideTypes
                 multipleMatchStrategy.value = f.multipleMatchStrategy
+
+                // If user has saved custom ride types that aren't in defaults, add them
+                val extraBharat = f.allowedRideTypes.filter { t ->
+                    t.contains("Cab", ignoreCase = true) || t.contains("Intercity", ignoreCase = true) || t.contains("Economy", ignoreCase = true)
+                }
+                if (extraBharat.isNotEmpty()) {
+                    bharatTaxiRideTypes.value = (bharatTaxiRideTypes.value + extraBharat).distinct()
+                }
+                val extraRapido = f.allowedRideTypes.filter { !bharatTaxiRideTypes.value.contains(it) }
+                if (extraRapido.isNotEmpty()) {
+                    rapidoRideTypes.value = (rapidoRideTypes.value + extraRapido).distinct()
+                }
             }
         }
     }
@@ -91,6 +112,40 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
         allowedRideTypes.value = current
     }
 
+    fun addCustomRideType() {
+        val type = customRideTypeInput.value.trim()
+        if (type.isEmpty()) return
+
+        if (selectedAppForCustomType.value == "bharat_taxi") {
+            if (!bharatTaxiRideTypes.value.contains(type)) {
+                bharatTaxiRideTypes.value = bharatTaxiRideTypes.value + type
+            }
+        } else {
+            if (!rapidoRideTypes.value.contains(type)) {
+                rapidoRideTypes.value = rapidoRideTypes.value + type
+            }
+        }
+        // Auto-select newly added custom ride type
+        val current = allowedRideTypes.value.toMutableSet()
+        current.add(type)
+        allowedRideTypes.value = current
+        customRideTypeInput.value = ""
+    }
+
+    fun recordDiscoveredRideType(appId: String, rideType: String) {
+        val clean = rideType.trim()
+        if (clean.isEmpty()) return
+        if (appId == "bharat_taxi") {
+            if (!bharatTaxiRideTypes.value.any { it.equals(clean, ignoreCase = true) }) {
+                bharatTaxiRideTypes.value = bharatTaxiRideTypes.value + clean
+            }
+        } else {
+            if (!rapidoRideTypes.value.any { it.equals(clean, ignoreCase = true) }) {
+                rapidoRideTypes.value = rapidoRideTypes.value + clean
+            }
+        }
+    }
+
     fun saveFilters() {
         val pMin = pickupDistMin.value.toDoubleOrNull() ?: 0.0
         val pMax = pickupDistMax.value.toDoubleOrNull() ?: 5.0
@@ -98,16 +153,16 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
         val dMax = dropDistMax.value.toDoubleOrNull() ?: 150.0
 
         if (pMin > pMax) {
-            _errorMessage.value = "Pickup min distance cannot exceed max distance."
+            _errorMessage.value = "Min pickup distance cannot exceed Max pickup distance"
             return
         }
         if (dMin > dMax) {
-            _errorMessage.value = "Drop min distance cannot exceed max distance."
+            _errorMessage.value = "Min drop distance cannot exceed Max drop distance"
             return
         }
-        _errorMessage.value = null
 
-        val fPerKm = minFarePerKm.value.toDoubleOrNull() ?: 0.0
+        _errorMessage.value = null
+        val minRate = minFarePerKm.value.toDoubleOrNull() ?: 0.0
 
         viewModelScope.launch {
             val updated = filter.value.copy(
@@ -117,7 +172,7 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
                 dropDistanceMinKm = dMin,
                 dropDistanceMaxKm = dMax,
                 fareBasis = fareBasis.value,
-                minFarePerKm = fPerKm,
+                minFarePerKm = minRate,
                 isLocationFilterEnabled = isLocationFilterEnabled.value,
                 locationKeywords = locationKeywords.value,
                 allowedRideTypes = allowedRideTypes.value,
@@ -133,6 +188,8 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
     fun resetFilters() {
         viewModelScope.launch {
             filterRepository.resetFilters()
+            _isSavedRecently.value = false
+            _errorMessage.value = null
         }
     }
 }

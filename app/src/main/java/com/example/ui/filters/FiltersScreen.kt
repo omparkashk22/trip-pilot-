@@ -19,12 +19,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.ButtonDefaults
@@ -48,24 +46,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-import com.example.data.model.LocationKeyword
 import com.example.ui.components.AppCard
-import com.example.ui.components.CustomTextField
+import com.example.ui.components.AppTextField
 import com.example.ui.components.PrimaryActionButton
-import com.example.ui.theme.AccentGreenSuccess
-import com.example.ui.theme.AccentRedDanger
-import com.example.ui.theme.BorderDivider
-import com.example.ui.theme.DarkBackground
-import com.example.ui.theme.DarkSurface
-import com.example.ui.theme.DarkSurfaceElevated
-import com.example.ui.theme.DarkSurfaceVariant
-import com.example.ui.theme.PrimaryCyan
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.LocalAppColors
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FiltersScreen(viewModel: FiltersViewModel) {
+    val colors = LocalAppColors.current
+
     val filter by viewModel.filter.collectAsState()
     val isSavedRecently by viewModel.isSavedRecently.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -84,6 +74,11 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
     val isAcceptKw by viewModel.isNewKeywordAccept.collectAsState()
     val locKeywords by viewModel.locationKeywords.collectAsState()
 
+    val bharatTypes by viewModel.bharatTaxiRideTypes.collectAsState()
+    val rapidoTypes by viewModel.rapidoRideTypes.collectAsState()
+    val customTypeInput by viewModel.customRideTypeInput.collectAsState()
+    val selectedAppForCustom by viewModel.selectedAppForCustomType.collectAsState()
+
     val allowedTypes by viewModel.allowedRideTypes.collectAsState()
     val matchStrategy by viewModel.multipleMatchStrategy.collectAsState()
 
@@ -92,56 +87,31 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(colors.background)
             .verticalScroll(scrollState)
-            .padding(16.dp),
+            .padding(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Plain-Language Rule Summary Preview Card
-        AppCard(backgroundColor = DarkSurfaceElevated, borderColor = PrimaryCyan.copy(alpha = 0.3f)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(Icons.Default.Info, contentDescription = null, tint = PrimaryCyan, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = stringResource(R.string.rule_summary_title),
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryCyan,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = filter.generateRuleSummary(),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = TextPrimary,
-                            lineHeight = 20.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    )
-                }
-            }
-        }
-
-        // Error message if any
+        // Error banner
         AnimatedVisibility(visible = errorMessage != null) {
             Surface(
-                color = AccentRedDanger.copy(alpha = 0.15f),
+                color = colors.danger.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, AccentRedDanger.copy(alpha = 0.4f)),
+                border = BorderStroke(1.dp, colors.danger.copy(alpha = 0.4f)),
                 modifier = Modifier.fillMaxWidth().widthIn(max = 600.dp)
             ) {
                 Text(
                     text = errorMessage ?: "",
-                    color = AccentRedDanger,
+                    color = colors.danger,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(12.dp)
                 )
             }
         }
 
-        // 1. Distance Filter Card
-        AppCard(backgroundColor = DarkSurface) {
+        // Section 1: Distance Limits Card
+        AppCard(backgroundColor = colors.surface, borderColor = colors.hairline) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -149,57 +119,81 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
             ) {
                 Text(
                     text = stringResource(R.string.distance_filter),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary)
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = colors.text)
                 )
                 Switch(
                     checked = isDistEnabled,
                     onCheckedChange = { viewModel.isDistanceFilterEnabled.value = it },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = DarkBackground,
-                        checkedTrackColor = PrimaryCyan,
-                        uncheckedThumbColor = TextSecondary,
-                        uncheckedTrackColor = DarkSurfaceElevated
+                        checkedThumbColor = colors.background,
+                        checkedTrackColor = colors.accent,
+                        uncheckedThumbColor = colors.textSecondary,
+                        uncheckedTrackColor = colors.surface2
                     )
                 )
             }
 
             AnimatedVisibility(visible = isDistEnabled) {
-                Column(modifier = Modifier.padding(top = 16.dp)) {
-                    Text(text = "Pickup Distance (km)", color = PrimaryCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        CustomTextField(
+                Column(modifier = Modifier.padding(top = 14.dp)) {
+                    Text(
+                        text = "Pickup Distance Range",
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        AppTextField(
                             value = pMin,
                             onValueChange = { viewModel.pickupDistMin.value = it },
-                            label = "Min (km)",
+                            label = "Min Pickup",
+                            isNumeric = true,
+                            unitText = "km",
                             modifier = Modifier.weight(1f),
                             testTag = "filter_pickup_min"
                         )
-                        CustomTextField(
+                        AppTextField(
                             value = pMax,
                             onValueChange = { viewModel.pickupDistMax.value = it },
-                            label = "Max (km)",
+                            label = "Max Pickup",
+                            isNumeric = true,
+                            unitText = "km",
                             modifier = Modifier.weight(1f),
                             testTag = "filter_pickup_max"
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    Text(text = "Drop Distance (km)", color = PrimaryCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        CustomTextField(
+                    Text(
+                        text = "Drop Distance Range",
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        AppTextField(
                             value = dMin,
                             onValueChange = { viewModel.dropDistMin.value = it },
-                            label = "Min (km)",
+                            label = "Min Drop",
+                            isNumeric = true,
+                            unitText = "km",
                             modifier = Modifier.weight(1f),
                             testTag = "filter_drop_min"
                         )
-                        CustomTextField(
+                        AppTextField(
                             value = dMax,
                             onValueChange = { viewModel.dropDistMax.value = it },
-                            label = "Max (km)",
+                            label = "Max Drop",
+                            isNumeric = true,
+                            unitText = "km",
                             modifier = Modifier.weight(1f),
                             testTag = "filter_drop_max"
                         )
@@ -208,29 +202,22 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
             }
         }
 
-        // 2. Fare Settings Card
-        AppCard(backgroundColor = DarkSurface) {
+        // Section 2: Fare per km & Basis Card
+        AppCard(backgroundColor = colors.surface, borderColor = colors.hairline) {
             Text(
                 text = stringResource(R.string.fare_settings),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary)
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = colors.text)
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
-                text = stringResource(R.string.fare_used_for_filters),
-                color = TextSecondary,
-                fontSize = 13.sp
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
+            // Segmented Control for Fare Basis
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(DarkSurfaceElevated)
-                    .padding(4.dp),
+                    .background(colors.surface2)
+                    .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 val isBaseOnly = fareBasis == "base_only"
@@ -238,16 +225,16 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (isBaseOnly) PrimaryCyan else Color.Transparent)
+                        .background(if (isBaseOnly) colors.accent else Color.Transparent)
                         .clickable { viewModel.fareBasis.value = "base_only" }
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = stringResource(R.string.fare_base_only),
                         fontWeight = if (isBaseOnly) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isBaseOnly) Color(0xFF060B18) else TextSecondary,
-                        fontSize = 13.sp
+                        color = if (isBaseOnly) Color(0xFF060B18) else colors.textSecondary,
+                        fontSize = 12.sp
                     )
                 }
 
@@ -256,33 +243,35 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (isBaseExtra) PrimaryCyan else Color.Transparent)
+                        .background(if (isBaseExtra) colors.accent else Color.Transparent)
                         .clickable { viewModel.fareBasis.value = "base_extra" }
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = stringResource(R.string.fare_base_extra),
                         fontWeight = if (isBaseExtra) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isBaseExtra) Color(0xFF060B18) else TextSecondary,
-                        fontSize = 13.sp
+                        color = if (isBaseExtra) Color(0xFF060B18) else colors.textSecondary,
+                        fontSize = 12.sp
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            CustomTextField(
+            AppTextField(
                 value = minFarePerKm,
                 onValueChange = { viewModel.minFarePerKm.value = it },
                 label = stringResource(R.string.min_fare_per_km),
                 placeholder = "Optional e.g. 15",
+                isNumeric = true,
+                unitText = "₹/km",
                 testTag = "filter_min_fare_per_km"
             )
         }
 
-        // 3. Location Filter Card
-        AppCard(backgroundColor = DarkSurface) {
+        // Section 3: Location Filter Card
+        AppCard(backgroundColor = colors.surface, borderColor = colors.hairline) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -290,23 +279,23 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
             ) {
                 Text(
                     text = stringResource(R.string.location_filter),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary)
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = colors.text)
                 )
                 Switch(
                     checked = isLocEnabled,
                     onCheckedChange = { viewModel.isLocationFilterEnabled.value = it },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = DarkBackground,
-                        checkedTrackColor = PrimaryCyan,
-                        uncheckedThumbColor = TextSecondary,
-                        uncheckedTrackColor = DarkSurfaceElevated
+                        checkedThumbColor = colors.background,
+                        checkedTrackColor = colors.accent,
+                        uncheckedThumbColor = colors.textSecondary,
+                        uncheckedTrackColor = colors.surface2
                     )
                 )
             }
 
             AnimatedVisibility(visible = isLocEnabled) {
-                Column(modifier = Modifier.padding(top = 16.dp)) {
-                    CustomTextField(
+                Column(modifier = Modifier.padding(top = 14.dp)) {
+                    AppTextField(
                         value = newKeyword,
                         onValueChange = { viewModel.newLocationKeyword.value = it },
                         label = "Location Keyword",
@@ -314,7 +303,7 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
                         testTag = "filter_loc_input"
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -326,14 +315,14 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(DarkSurfaceElevated)
+                                .background(colors.surface2)
                                 .padding(2.dp)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isAcceptKw) AccentGreenSuccess else Color.Transparent)
+                                    .background(if (isAcceptKw) colors.success else Color.Transparent)
                                     .clickable { viewModel.isNewKeywordAccept.value = true }
                                     .padding(vertical = 8.dp),
                                 contentAlignment = Alignment.Center
@@ -341,7 +330,7 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
                                 Text(
                                     text = stringResource(R.string.filter_accept),
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isAcceptKw) Color(0xFF060B18) else TextSecondary,
+                                    color = if (isAcceptKw) Color(0xFF060B18) else colors.textSecondary,
                                     fontSize = 12.sp
                                 )
                             }
@@ -349,7 +338,7 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(if (!isAcceptKw) AccentRedDanger else Color.Transparent)
+                                    .background(if (!isAcceptKw) colors.danger else Color.Transparent)
                                     .clickable { viewModel.isNewKeywordAccept.value = false }
                                     .padding(vertical = 8.dp),
                                 contentAlignment = Alignment.Center
@@ -357,7 +346,7 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
                                 Text(
                                     text = stringResource(R.string.filter_reject),
                                     fontWeight = FontWeight.Bold,
-                                    color = if (!isAcceptKw) Color.White else TextSecondary,
+                                    color = if (!isAcceptKw) Color.White else colors.textSecondary,
                                     fontSize = 12.sp
                                 )
                             }
@@ -366,8 +355,8 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
                         OutlinedButton(
                             onClick = viewModel::addLocationKeyword,
                             shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, PrimaryCyan),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryCyan),
+                            border = BorderStroke(1.dp, colors.accent),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.accent),
                             modifier = Modifier.height(44.dp)
                         ) {
                             Text(stringResource(R.string.add_filter), fontSize = 13.sp)
@@ -375,33 +364,32 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
                     }
 
                     if (locKeywords.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             locKeywords.forEach { item ->
-                                val chipBg = if (item.isAccept) AccentGreenSuccess.copy(alpha = 0.2f) else AccentRedDanger.copy(alpha = 0.2f)
-                                val chipBorder = if (item.isAccept) AccentGreenSuccess else AccentRedDanger
+                                val chipBorder = if (item.isAccept) colors.success else colors.danger
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
-                                    color = chipBg,
+                                    color = chipBorder.copy(alpha = 0.15f),
                                     border = BorderStroke(1.dp, chipBorder),
                                     modifier = Modifier.clickable { viewModel.removeLocationKeyword(item) }
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                     ) {
                                         Text(
                                             text = "${if (item.isAccept) "✓" else "✗"} ${item.keyword}",
                                             color = chipBorder,
-                                            fontSize = 13.sp,
+                                            fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Icon(Icons.Default.Close, contentDescription = "Delete", tint = chipBorder, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(Icons.Default.Close, contentDescription = "Delete", tint = chipBorder, modifier = Modifier.size(13.dp))
                                     }
                                 }
                             }
@@ -411,88 +399,259 @@ fun FiltersScreen(viewModel: FiltersViewModel) {
             }
         }
 
-        // 4. Allowed Ride Types Card
-        AppCard(backgroundColor = DarkSurface) {
+        // Section 4: Allowed Ride Types Card (Requirement I-list)
+        AppCard(backgroundColor = colors.surface, borderColor = colors.hairline) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.allowed_ride_types),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = colors.text)
+                )
+                Text(
+                    text = if (allowedTypes.isEmpty()) "All allowed" else "${allowedTypes.size} selected",
+                    color = if (allowedTypes.isEmpty()) colors.success else colors.accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = stringResource(R.string.allowed_ride_types),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary)
+                text = "When none are selected, all ride types are allowed.",
+                color = colors.textSecondary,
+                fontSize = 11.sp
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
+            // Group 1: Bharat Taxi
+            Text(
+                text = "Bharat Taxi",
+                color = colors.accent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                viewModel.availableRideTypes.forEach { type ->
-                    val isSelected = allowedTypes.isEmpty() || allowedTypes.contains(type)
+                bharatTypes.forEach { type ->
+                    val isSelected = allowedTypes.contains(type)
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) PrimaryCyan.copy(alpha = 0.15f) else DarkSurfaceElevated,
-                        border = BorderStroke(1.dp, if (isSelected) PrimaryCyan else BorderDivider),
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isSelected) colors.accent.copy(alpha = 0.2f) else colors.surface2,
+                        border = BorderStroke(1.dp, if (isSelected) colors.accent else colors.hairline),
                         modifier = Modifier.clickable { viewModel.toggleRideType(type) }
                     ) {
                         Text(
                             text = type,
-                            color = if (isSelected) PrimaryCyan else TextSecondary,
-                            fontSize = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            color = if (isSelected) colors.accent else colors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                         )
                     }
                 }
             }
-        }
 
-        // 5. Match Strategy Card
-        AppCard(backgroundColor = DarkSurface) {
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Group 2: Rapido
             Text(
-                text = stringResource(R.string.when_several_rides_match),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary)
+                text = "Rapido",
+                color = colors.warning,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
             )
+            Spacer(modifier = Modifier.height(6.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                rapidoTypes.forEach { type ->
+                    val isSelected = allowedTypes.contains(type)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isSelected) colors.warning.copy(alpha = 0.2f) else colors.surface2,
+                        border = BorderStroke(1.dp, if (isSelected) colors.warning else colors.hairline),
+                        modifier = Modifier.clickable { viewModel.toggleRideType(type) }
+                    ) {
+                        Text(
+                            text = type,
+                            color = if (isSelected) colors.warning else colors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            val strategies = listOf(
-                "first_match" to R.string.strategy_first_top,
-                "highest_fare" to R.string.strategy_highest_fare,
-                "highest_per_km" to R.string.strategy_highest_per_km,
-                "nearest_pickup" to R.string.strategy_nearest_pickup
+            // Add Custom Ride Type Row
+            Text(
+                text = "Add Custom Ride Type",
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
             )
-
-            strategies.forEach { (key, labelRes) ->
-                val isSelected = matchStrategy == key
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Selector for which app
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.multipleMatchStrategy.value = key }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(colors.surface2)
+                        .padding(2.dp)
                 ) {
-                    Icon(
-                        imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
-                        contentDescription = null,
-                        tint = if (isSelected) PrimaryCyan else TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = stringResource(labelRes),
-                        color = if (isSelected) TextPrimary else TextSecondary,
-                        fontSize = 14.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                    )
+                    val isBt = selectedAppForCustom == "bharat_taxi"
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isBt) colors.accent else Color.Transparent)
+                            .clickable { viewModel.selectedAppForCustomType.value = "bharat_taxi" }
+                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                    ) {
+                        Text("Bharat", fontSize = 11.sp, color = if (isBt) Color(0xFF060B18) else colors.textSecondary, fontWeight = FontWeight.Bold)
+                    }
+                    val isRp = selectedAppForCustom == "rapido"
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isRp) colors.warning else Color.Transparent)
+                            .clickable { viewModel.selectedAppForCustomType.value = "rapido" }
+                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                    ) {
+                        Text("Rapido", fontSize = 11.sp, color = if (isRp) Color(0xFF060B18) else colors.textSecondary, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                AppTextField(
+                    value = customTypeInput,
+                    onValueChange = { viewModel.customRideTypeInput.value = it },
+                    label = "Ride type name",
+                    placeholder = "e.g. Bike Lite",
+                    modifier = Modifier.weight(1f),
+                    testTag = "filter_add_ride_type_input"
+                )
+
+                OutlinedButton(
+                    onClick = viewModel::addCustomRideType,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, colors.accent),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.accent),
+                    modifier = Modifier.height(44.dp)
+                ) {
+                    Text("Add", fontSize = 12.sp)
                 }
             }
         }
 
-        // Save & Reset Buttons
+        // Section 5: Multiple Match Selection Strategy Card
+        AppCard(backgroundColor = colors.surface, borderColor = colors.hairline) {
+            Text(
+                text = stringResource(R.string.when_several_rides_match),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = colors.text)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            StrategyOption(
+                title = stringResource(R.string.strategy_first_top),
+                description = "Accepts the topmost eligible offer card immediately",
+                isSelected = matchStrategy == "first_match",
+                onClick = { viewModel.multipleMatchStrategy.value = "first_match" }
+            )
+            StrategyOption(
+                title = stringResource(R.string.strategy_highest_fare),
+                description = "Compares visible cards and picks the highest total payout",
+                isSelected = matchStrategy == "highest_fare",
+                onClick = { viewModel.multipleMatchStrategy.value = "highest_fare" }
+            )
+            StrategyOption(
+                title = stringResource(R.string.strategy_highest_per_km),
+                description = "Picks the trip offering maximum earnings per kilometer",
+                isSelected = matchStrategy == "highest_per_km",
+                onClick = { viewModel.multipleMatchStrategy.value = "highest_per_km" }
+            )
+            StrategyOption(
+                title = stringResource(R.string.strategy_nearest_pickup),
+                description = "Picks the offer with shortest driver-to-pickup distance",
+                isSelected = matchStrategy == "nearest_pickup",
+                onClick = { viewModel.multipleMatchStrategy.value = "nearest_pickup" }
+            )
+        }
+
+        // Section 6: Action Buttons
         PrimaryActionButton(
             text = if (isSavedRecently) stringResource(R.string.filter_saved) else stringResource(R.string.save_filter),
             onClick = viewModel::saveFilters,
             isSuccessState = isSavedRecently,
-            testTag = "filter_save_all_button"
+            testTag = "filters_save_button"
         )
+
+        OutlinedButton(
+            onClick = viewModel::resetFilters,
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, colors.hairline),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 600.dp)
+                .height(44.dp)
+        ) {
+            Text(stringResource(R.string.reset_filters), fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+fun StrategyOption(
+    title: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = LocalAppColors.current
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable { onClick() }
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+            contentDescription = null,
+            tint = if (isSelected) colors.accent else colors.textSecondary,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Column {
+            Text(
+                text = title,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) colors.accent else colors.text,
+                fontSize = 13.sp
+            )
+            Text(
+                text = description,
+                color = colors.textSecondary,
+                fontSize = 11.sp
+            )
+        }
     }
 }

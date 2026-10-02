@@ -2,25 +2,88 @@
   {
     "appId": "bharat_taxi",
     "displayName": "Bharat Taxi",
-    "candidatePackages": [],
-    "labelKeywords": ["bharat taxi driver", "bharat taxi partner", "bharat taxi"],
-    "excludePackages": [],
+    "candidatePackages": [
+      "in.mobility.bharattaxidriver"
+    ],
+    "labelKeywords": [
+      "bharat taxi driver",
+      "bharat taxi partner"
+    ],
+    "excludePackages": [
+      "com.bharat.taxi"
+    ],
+    "variant1ViewIds": {
+      "recyclerView": "ride_request_content_recycler_view",
+      "cardContainer": "container",
+      "tvCurrency": "tv_currency",
+      "tvValue": "tv_value",
+      "pickupDistance": "pickupDistance",
+      "tripDistance": "tripDistance",
+      "primaryText": "tv_primary_text",
+      "rideDecline": "ride_decline",
+      "rideAccept": "ride_accept",
+      "rideAcceptText": "ride_accept_text",
+      "leftRail": "ride_request_tab_recycler_view"
+    },
+    "neverClickIds": [
+      "ride_decline",
+      "rr_silent_container",
+      "rr_minimize_container",
+      "tts_toggle_container",
+      "ride_request_tab_recycler_view"
+    ],
     "fareRegex": "₹\\s*([0-9][0-9,]*(\\.[0-9]+)?)",
-    "distanceTimeRegex": "([0-9]+(\\.[0-9]+)?)\\s*(km|m)\\s*[·•.\\-]\\s*([0-9]+)\\s*(min|mins)",
-    "acceptTexts": ["Accept", "स्वीकार करें"],
-    "neverClickTexts": ["+10", "+20", "+30", "X", "More requests", "अधिक अनुरोध"],
-    "detectionHints": ["Accept", "₹"]
+    "distanceTimeRegex": "([0-9]+(?:\\.[0-9]+)?)\\s*(km|m)\\b\\s*[^0-9A-Za-z]{0,3}\\s*([0-9]+)\\s*(?:min|mins)\\b",
+    "acceptTexts": [
+      "Accept",
+      "स्वीकार करें"
+    ],
+    "neverClickTexts": [
+      "+10",
+      "+20",
+      "+30",
+      "X",
+      "More requests",
+      "अधिक अनुरोध"
+    ],
+    "detectionHints": [
+      "Accept",
+      "₹"
+    ]
   },
   {
     "appId": "rapido",
     "displayName": "Rapido",
-    "candidatePackages": ["com.rapido.rider"],
-    "labelKeywords": ["rapido captain", "rapido"],
-    "excludePackages": ["com.rapido.passenger"],
+    "candidatePackages": [
+      "com.rapido.rider"
+    ],
+    "labelKeywords": [
+      "rapido captain",
+      "rapido"
+    ],
+    "excludePackages": [
+      "com.rapido.passenger"
+    ],
+    "variant1ViewIds": {},
+    "neverClickIds": [],
     "fareRegex": "₹\\s*([0-9][0-9,]*(\\.[0-9]+)?)\\s*(\\+\\s*₹\\s*([0-9][0-9,]*(\\.[0-9]+)?))?",
+    "distanceTimeRegex": "([0-9]+(?:\\.[0-9]+)?)\\s*(km|m)\\b\\s*[^0-9A-Za-z]{0,3}\\s*([0-9]+)\\s*(?:min|mins)\\b",
     "distanceRegex": "([0-9]+(\\.[0-9]+)?)\\s*(km|m)\\b",
-    "acceptTexts": ["Accept", "स्वीकार करें"],
-    "neverClickTexts": ["-", "Go To", "Stay In", "Extra from Customer"],
-    "detectionHints": ["Accept", "₹", "Go To", "Stay In"]
+    "acceptTexts": [
+      "Accept",
+      "स्वीकार करें"
+    ],
+    "neverClickTexts": [
+      "-",
+      "Go To",
+      "Stay In",
+      "Extra from Customer"
+    ],
+    "detectionHints": [
+      "Accept",
+      "₹",
+      "Go To",
+      "Stay In"
+    ]
   }
 ]

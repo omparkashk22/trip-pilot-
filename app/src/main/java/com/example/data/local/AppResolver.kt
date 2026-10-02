@@ -2,9 +2,9 @@ package com.example.data.local
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.util.Log
 import com.example.data.model.TargetAppConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -43,6 +43,22 @@ class AppResolver(private val context: Context) {
                     for (e in 0 until exArr.length()) excludes.add(exArr.getString(e))
                 }
 
+                val variant1Map = mutableMapOf<String, String>()
+                val v1Obj = obj.optJSONObject("variant1ViewIds")
+                if (v1Obj != null) {
+                    val keys = v1Obj.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        variant1Map[key] = v1Obj.getString(key)
+                    }
+                }
+
+                val neverClickIds = mutableListOf<String>()
+                val ncIdArr = obj.optJSONArray("neverClickIds")
+                if (ncIdArr != null) {
+                    for (n in 0 until ncIdArr.length()) neverClickIds.add(ncIdArr.getString(n))
+                }
+
                 val accepts = mutableListOf<String>()
                 val accArr = obj.optJSONArray("acceptTexts")
                 if (accArr != null) {
@@ -54,6 +70,12 @@ class AppResolver(private val context: Context) {
                     for (n in 0 until ncArr.length()) neverClicks.add(ncArr.getString(n))
                 }
 
+                val hints = mutableListOf<String>()
+                val hArr = obj.optJSONArray("detectionHints")
+                if (hArr != null) {
+                    for (h in 0 until hArr.length()) hints.add(hArr.getString(h))
+                }
+
                 list.add(
                     TargetAppConfig(
                         appId = obj.getString("appId"),
@@ -61,38 +83,46 @@ class AppResolver(private val context: Context) {
                         candidatePackages = candidates,
                         labelKeywords = keywords,
                         excludePackages = excludes,
+                        variant1ViewIds = variant1Map,
+                        neverClickIds = neverClickIds,
                         fareRegex = obj.optString("fareRegex", ""),
                         distanceTimeRegex = obj.optString("distanceTimeRegex", ""),
                         distanceRegex = obj.optString("distanceRegex", ""),
                         acceptTexts = if (accepts.isNotEmpty()) accepts else listOf("Accept"),
-                        neverClickTexts = neverClicks
+                        neverClickTexts = neverClicks,
+                        detectionHints = hints
                     )
                 )
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e("AppResolver", "Error loading target_apps.json", e)
+        }
         list
     }
 
     suspend fun resolvePackageForTarget(target: TargetAppConfig, savedPackage: String?): String? = withContext(Dispatchers.IO) {
-        // 0. If user previously chose a package and it is still installed, return it
-        if (!savedPackage.isNullOrEmpty() && isPackageInstalled(savedPackage)) {
+        // A manual choice saved in DataStore overrides the candidates,
+        // but if the saved package is not installed or is in excludePackages, discard it and re-run resolution.
+        if (!savedPackage.isNullOrEmpty() &&
+            isPackageInstalled(savedPackage) &&
+            !target.excludePackages.any { it.equals(savedPackage, ignoreCase = true) }
+        ) {
             return@withContext savedPackage
         }
 
-        // (a) First installed package from candidatePackages
+        // (a) First installed package from candidatePackages (excluding excludePackages)
         for (candidate in target.candidatePackages) {
-            if (isPackageInstalled(candidate)) {
+            if (!target.excludePackages.any { it.equals(candidate, ignoreCase = true) } && isPackageInstalled(candidate)) {
                 return@withContext candidate
             }
         }
 
-        // (b) Find matching installed launchable apps by label keywords
+        // (b) Find matching installed launchable apps by label keywords (excluding excludePackages)
         val matches = findMatchingInstalledApps(target)
         if (matches.size == 1) {
             return@withContext matches.first().packageName
         }
 
-        // If multiple or none, caller can prompt user
         null
     }
 

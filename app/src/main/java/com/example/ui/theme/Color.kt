@@ -2,28 +2,47 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// TripPilot Dark-First Original Palette
-val DarkBackground = Color(0xFF060B18)
-val DarkSurface = Color(0xFF111C33)
-val DarkSurfaceElevated = Color(0xFF16233F)
-val DarkSurfaceVariant = Color(0xFF1A2744)
+// Dark Palette
+val DarkBg = Color(0xFF0B0F1A)
+val DarkSurf = Color(0xFF141A29)
+val DarkSurf2 = Color(0xFF1B2336)
+val DarkTxt = Color(0xFFF5F7FA)
+val DarkTxtSec = Color(0xFF8B95A7)
+val DarkHairline = Color(0x14FFFFFF) // 8% white
+val DarkAccent = Color(0xFF22D3EE)
+val DarkSuccess = Color(0xFF34D399)
+val DarkWarning = Color(0xFFFBBF24)
+val DarkDanger = Color(0xFFFB7185)
 
-val PrimaryCyan = Color(0xFF00E5FF)
+// Light Palette
+val LightBg = Color(0xFFF5F5F7)
+val LightSurf = Color(0xFFFFFFFF)
+val LightSurf2 = Color(0xFFF0F1F5)
+val LightTxt = Color(0xFF1C1C1E)
+val LightTxtSec = Color(0xFF6B7280)
+val LightHairline = Color(0x14000000) // 8% black
+val LightAccent = Color(0xFF0891B2)
+val LightSuccess = Color(0xFF16A34A)
+val LightWarning = Color(0xFFD97706)
+val LightDanger = Color(0xFFE11D48)
+
+// Compatibility aliases
+val DarkBackground = DarkBg
+val DarkSurface = DarkSurf
+val DarkSurfaceElevated = DarkSurf2
+val DarkSurfaceVariant = DarkSurf2
+val PrimaryCyan = DarkAccent
 val PrimaryCyanVariant = Color(0xFF00B0FF)
-val AccentGreenSuccess = Color(0xFF22C55E)
-val AccentAmberWarning = Color(0xFFF59E0B)
-val AccentRedDanger = Color(0xFFFF3B5C)
-
-val TextPrimary = Color(0xFFFFFFFF)
-val TextSecondary = Color(0xFF9AA7BD)
-val TextTertiary = Color(0xFF62728C)
-val BorderDivider = Color(0xFF1F2D4A)
-
-// Light Theme Alternates
-val LightBackground = Color(0xFFF4F7FC)
-val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceElevated = Color(0xFFE9EEF7)
-val LightSurfaceVariant = Color(0xFFDCE4F0)
-val LightTextPrimary = Color(0xFF0C1322)
-val LightTextSecondary = Color(0xFF4A5568)
-val LightBorderDivider = Color(0xFFCBD5E1)
+val AccentGreenSuccess = DarkSuccess
+val AccentAmberWarning = DarkWarning
+val AccentRedDanger = DarkDanger
+val TextPrimary = DarkTxt
+val TextSecondary = DarkTxtSec
+val BorderDivider = DarkHairline
+val LightBackground = LightBg
+val LightSurface = LightSurf
+val LightSurfaceElevated = LightSurf2
+val LightSurfaceVariant = LightSurf2
+val LightTextPrimary = LightTxt
+val LightTextSecondary = LightTxtSec
+val LightBorderDivider = LightHairline

@@ -200,12 +200,10 @@ fun AuthScreen(
 
             if (uiState.mode != AuthMode.FORGOT_PASSWORD) {
                 Spacer(modifier = Modifier.height(14.dp))
-                OutlinedTextField(
+                com.example.ui.components.AppTextField(
                     value = uiState.password,
                     onValueChange = viewModel::onPasswordChange,
-                    label = { Text(stringResource(R.string.password_hint)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
+                    label = stringResource(R.string.password_hint),
                     visualTransformation = if (uiState.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = viewModel::togglePasswordVisibility) {
@@ -216,46 +214,18 @@ fun AuthScreen(
                             )
                         }
                     },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryCyan,
-                        unfocusedBorderColor = BorderDivider,
-                        focusedLabelColor = PrimaryCyan,
-                        unfocusedLabelColor = TextSecondary,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedContainerColor = DarkSurface,
-                        unfocusedContainerColor = DarkSurface
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .testTag("auth_password_input")
+                    testTag = "auth_password_input"
                 )
             }
 
             if (uiState.mode == AuthMode.SIGN_UP) {
                 Spacer(modifier = Modifier.height(14.dp))
-                OutlinedTextField(
+                com.example.ui.components.AppTextField(
                     value = uiState.confirmPassword,
                     onValueChange = viewModel::onConfirmPasswordChange,
-                    label = { Text(stringResource(R.string.confirm_password_hint)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
+                    label = stringResource(R.string.confirm_password_hint),
                     visualTransformation = PasswordVisualTransformation(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryCyan,
-                        unfocusedBorderColor = BorderDivider,
-                        focusedLabelColor = PrimaryCyan,
-                        unfocusedLabelColor = TextSecondary,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedContainerColor = DarkSurface,
-                        unfocusedContainerColor = DarkSurface
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .testTag("auth_confirm_password_input")
+                    testTag = "auth_confirm_password_input"
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))

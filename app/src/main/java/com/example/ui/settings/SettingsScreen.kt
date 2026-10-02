@@ -18,13 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
@@ -39,7 +37,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -53,7 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -63,17 +60,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.components.AppCard
-import com.example.ui.theme.AccentAmberWarning
-import com.example.ui.theme.AccentGreenSuccess
-import com.example.ui.theme.AccentRedDanger
-import com.example.ui.theme.BorderDivider
-import com.example.ui.theme.DarkBackground
-import com.example.ui.theme.DarkSurface
-import com.example.ui.theme.DarkSurfaceElevated
-import com.example.ui.theme.DarkSurfaceVariant
-import com.example.ui.theme.PrimaryCyan
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.components.Icon3D
+import com.example.ui.components.Icon3DTint
+import com.example.ui.theme.LocalAppColors
 
 @Composable
 fun SettingsScreen(
@@ -82,6 +71,8 @@ fun SettingsScreen(
     onNavigateToDevTools: () -> Unit
 ) {
     val context = LocalContext.current
+    val colors = LocalAppColors.current
+
     val currentLang by viewModel.currentLanguage.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
     val keepScreenOn by viewModel.keepScreenOn.collectAsState()
@@ -112,16 +103,16 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(colors.background)
             .verticalScroll(scrollState)
-            .padding(16.dp),
+            .padding(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Setup Guide & Developer Tools Navigation Cards
+        // Setup Guide Navigation Card
         AppCard(
-            backgroundColor = DarkSurfaceElevated,
-            borderColor = PrimaryCyan.copy(alpha = 0.3f),
+            backgroundColor = colors.surface,
+            borderColor = colors.hairline,
             onClick = onNavigateToSetupGuide,
             modifier = Modifier.testTag("nav_setup_guide")
         ) {
@@ -131,37 +122,30 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(PrimaryCyan.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Rule, contentDescription = null, tint = PrimaryCyan, modifier = Modifier.size(22.dp))
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Icon3D(icon = Icons.Default.Rule, tint = Icon3DTint.CYAN)
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
                             text = stringResource(R.string.setup_guide),
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            fontSize = 15.sp
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.text,
+                            fontSize = 13.sp
                         )
                         Text(
-                            text = "Guided permission & device OEM configuration checklist",
-                            color = TextSecondary,
-                            fontSize = 12.sp
+                            text = "Guided permission & device OEM configuration",
+                            color = colors.textSecondary,
+                            fontSize = 11.sp
                         )
                     }
                 }
-                Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = PrimaryCyan, modifier = Modifier.size(16.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = colors.accent, modifier = Modifier.size(14.dp))
             }
         }
 
+        // Developer Tools Navigation Card
         AppCard(
-            backgroundColor = DarkSurfaceElevated,
-            borderColor = BorderDivider,
+            backgroundColor = colors.surface,
+            borderColor = colors.hairline,
             onClick = onNavigateToDevTools,
             modifier = Modifier.testTag("nav_dev_tools")
         ) {
@@ -171,140 +155,150 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(DarkSurfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Build, contentDescription = null, tint = PrimaryCyan, modifier = Modifier.size(20.dp))
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Icon3D(icon = Icons.Default.Build, tint = Icon3DTint.VIOLET)
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
                             text = stringResource(R.string.developer_tools),
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            fontSize = 15.sp
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.text,
+                            fontSize = 13.sp
                         )
                         Text(
                             text = "Screen Inspector & Ride Offer Simulator",
-                            color = TextSecondary,
-                            fontSize = 12.sp
+                            color = colors.textSecondary,
+                            fontSize = 11.sp
                         )
                     }
                 }
-                Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
             }
         }
 
-        // General Preferences Card
-        AppCard(backgroundColor = DarkSurface) {
+        // App Preferences Card
+        AppCard(backgroundColor = colors.surface, borderColor = colors.hairline) {
             Text(
                 text = "Preferences",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = PrimaryCyan)
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Language
-            SettingsRow(
+            // Language Row
+            SettingsClickableRow(
                 icon = Icons.Default.Language,
+                tint = Icon3DTint.CYAN,
                 title = stringResource(R.string.language),
-                subtitle = languages.firstOrNull { it.first == currentLang }?.second ?: "English",
+                value = languages.find { it.first == currentLang }?.second ?: "English",
                 onClick = { showLangDialog = true }
             )
 
-            // Theme
-            SettingsRow(
+            // Theme Row
+            SettingsClickableRow(
                 icon = Icons.Default.DarkMode,
+                tint = Icon3DTint.AMBER,
                 title = stringResource(R.string.theme),
-                subtitle = currentTheme.replaceFirstChar { it.uppercase() },
+                value = when (currentTheme.lowercase()) {
+                    "light" -> "Light"
+                    "system" -> "System"
+                    else -> "Dark"
+                },
                 onClick = { showThemeDialog = true }
             )
 
-            // Tap Method
-            SettingsRow(
+            // Tap Method Row
+            SettingsClickableRow(
                 icon = Icons.Default.TouchApp,
+                tint = Icon3DTint.GREEN,
                 title = stringResource(R.string.tap_method),
-                subtitle = when (tapMethod) {
+                value = when (tapMethod) {
                     "node_click" -> "Node Click"
                     "parent_click" -> "Parent Click"
                     "gesture" -> "Gesture Tap"
-                    else -> "Auto (Best calibrated)"
+                    else -> "Auto"
                 },
                 onClick = { showTapMethodDialog = true }
             )
+        }
+
+        // Monitoring & Automation Controls Card
+        AppCard(backgroundColor = colors.surface, borderColor = colors.hairline) {
+            Text(
+                text = "Monitoring & Behavior",
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Keep Screen On
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.keep_screen_on), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text(text = "Prevents device sleep while driver app is watching", color = TextSecondary, fontSize = 12.sp)
+                    Text(text = stringResource(R.string.keep_screen_on), color = colors.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text(text = "Prevents screen from sleeping while monitoring", color = colors.textSecondary, fontSize = 11.sp)
                 }
                 Switch(
                     checked = keepScreenOn,
                     onCheckedChange = viewModel::setKeepScreenOn,
+                    modifier = Modifier.scale(0.82f),
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = DarkBackground,
-                        checkedTrackColor = PrimaryCyan,
-                        uncheckedThumbColor = TextSecondary,
-                        uncheckedTrackColor = DarkSurfaceElevated
+                        checkedThumbColor = colors.background,
+                        checkedTrackColor = colors.accent,
+                        uncheckedThumbColor = colors.textSecondary,
+                        uncheckedTrackColor = colors.surface2
                     )
                 )
             }
 
             // Process Test Requests
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.process_test_requests), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text(text = "Accept cards tagged with 'TEST REQUEST' badge", color = TextSecondary, fontSize = 12.sp)
+                    Text(text = stringResource(R.string.process_test_requests), color = colors.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text(text = "Parses and evaluates mock/test offer cards", color = colors.textSecondary, fontSize = 11.sp)
                 }
                 Switch(
                     checked = processTestRequests,
                     onCheckedChange = viewModel::setProcessTestRequests,
+                    modifier = Modifier.scale(0.82f),
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = DarkBackground,
-                        checkedTrackColor = PrimaryCyan,
-                        uncheckedThumbColor = TextSecondary,
-                        uncheckedTrackColor = DarkSurfaceElevated
+                        checkedThumbColor = colors.background,
+                        checkedTrackColor = colors.accent,
+                        uncheckedThumbColor = colors.textSecondary,
+                        uncheckedTrackColor = colors.surface2
                     )
                 )
             }
 
             // Show Debug Info
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.show_debug_info), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text(text = "Displays tap strategy and latency in Ride History", color = TextSecondary, fontSize = 12.sp)
+                    Text(text = stringResource(R.string.show_debug_info), color = colors.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text(text = "Displays package and resolution details", color = colors.textSecondary, fontSize = 11.sp)
                 }
                 Switch(
                     checked = showDebugInfo,
                     onCheckedChange = viewModel::setShowDebugInfo,
+                    modifier = Modifier.scale(0.82f),
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = DarkBackground,
-                        checkedTrackColor = PrimaryCyan,
-                        uncheckedThumbColor = TextSecondary,
-                        uncheckedTrackColor = DarkSurfaceElevated
+                        checkedThumbColor = colors.background,
+                        checkedTrackColor = colors.accent,
+                        uncheckedThumbColor = colors.textSecondary,
+                        uncheckedTrackColor = colors.surface2
                     )
                 )
             }
@@ -315,38 +309,40 @@ fun SettingsScreen(
             OutlinedButton(
                 onClick = { showResetConfirmation = true },
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, AccentRedDanger),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRedDanger),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
+                border = BorderStroke(1.dp, colors.danger.copy(alpha = 0.5f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.danger),
+                modifier = Modifier.fillMaxWidth().height(42.dp)
             ) {
-                Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(stringResource(R.string.reset_filters), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.reset_filters), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
         // About Card
-        AppCard(backgroundColor = DarkSurface) {
+        AppCard(backgroundColor = colors.surface, borderColor = colors.hairline) {
             Text(
                 text = stringResource(R.string.about_trippilot),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary)
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = stringResource(R.string.version_label),
-                color = TextSecondary,
-                fontSize = 12.sp
+                color = colors.textSecondary,
+                fontSize = 11.sp
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     text = "Privacy Policy",
-                    color = PrimaryCyan,
-                    fontSize = 13.sp,
+                    color = colors.accent,
+                    fontSize = 12.sp,
                     modifier = Modifier.clickable {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://trippilot.in/privacy"))
                         try { context.startActivity(intent) } catch (_: Exception) {}
@@ -354,19 +350,10 @@ fun SettingsScreen(
                 )
                 Text(
                     text = "Terms of Service",
-                    color = PrimaryCyan,
-                    fontSize = 13.sp,
+                    color = colors.accent,
+                    fontSize = 12.sp,
                     modifier = Modifier.clickable {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://trippilot.in/terms"))
-                        try { context.startActivity(intent) } catch (_: Exception) {}
-                    }
-                )
-                Text(
-                    text = "Support",
-                    color = PrimaryCyan,
-                    fontSize = 13.sp,
-                    modifier = Modifier.clickable {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://trippilot.in/support"))
                         try { context.startActivity(intent) } catch (_: Exception) {}
                     }
                 )
@@ -378,9 +365,9 @@ fun SettingsScreen(
     if (showLangDialog) {
         AlertDialog(
             onDismissRequest = { showLangDialog = false },
-            title = { Text(stringResource(R.string.language), color = TextPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text("Select Language", color = colors.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
             text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Column {
                     languages.forEach { (code, name) ->
                         val isSelected = currentLang == code
                         Row(
@@ -390,40 +377,40 @@ fun SettingsScreen(
                                     viewModel.setLanguage(code)
                                     showLangDialog = false
                                 }
-                                .padding(vertical = 10.dp),
+                                .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
                                 contentDescription = null,
-                                tint = if (isSelected) PrimaryCyan else TextSecondary,
-                                modifier = Modifier.size(20.dp)
+                                tint = if (isSelected) colors.accent else colors.textSecondary,
+                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = name, color = if (isSelected) TextPrimary else TextSecondary, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(text = name, color = if (isSelected) colors.text else colors.textSecondary, fontSize = 13.sp)
                         }
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showLangDialog = false }) {
-                    Text("Close", color = PrimaryCyan)
+                    Text("Close", color = colors.accent, fontSize = 12.sp)
                 }
             },
-            containerColor = DarkSurface
+            containerColor = colors.surface
         )
     }
 
     // Theme Dialog
     if (showThemeDialog) {
-        val themes = listOf("dark" to "Dark (Default)", "light" to "Light", "system" to "System Default")
+        val themes = listOf("dark" to "Dark", "light" to "Light", "system" to "System Default")
         AlertDialog(
             onDismissRequest = { showThemeDialog = false },
-            title = { Text("Choose Theme", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text("Choose Theme", color = colors.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
             text = {
                 Column {
                     themes.forEach { (key, label) ->
-                        val isSelected = currentTheme == key
+                        val isSelected = currentTheme.equals(key, ignoreCase = true)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -431,25 +418,25 @@ fun SettingsScreen(
                                     viewModel.setTheme(key)
                                     showThemeDialog = false
                                 }
-                                .padding(vertical = 10.dp),
+                                .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
                                 contentDescription = null,
-                                tint = if (isSelected) PrimaryCyan else TextSecondary,
-                                modifier = Modifier.size(20.dp)
+                                tint = if (isSelected) colors.accent else colors.textSecondary,
+                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = label, color = if (isSelected) TextPrimary else TextSecondary, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(text = label, color = if (isSelected) colors.text else colors.textSecondary, fontSize = 13.sp)
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showThemeDialog = false }) { Text("Cancel", color = PrimaryCyan) }
+                TextButton(onClick = { showThemeDialog = false }) { Text("Cancel", color = colors.accent, fontSize = 12.sp) }
             },
-            containerColor = DarkSurface
+            containerColor = colors.surface
         )
     }
 
@@ -458,15 +445,15 @@ fun SettingsScreen(
         val methods = listOf(
             "auto" to "Auto (Best performing strategy)",
             "node_click" to "Node Click (ACTION_CLICK on node)",
-            "parent_click" to "Parent Click (ACTION_CLICK on ancestor)",
-            "gesture" to "Gesture Only (dispatchGesture tap)"
+            "parent_click" to "Parent Click (ACTION_CLICK on parent)",
+            "gesture" to "Gesture Tap (Simulated touch at bounds center)"
         )
         AlertDialog(
             onDismissRequest = { showTapMethodDialog = false },
-            title = { Text(stringResource(R.string.tap_method), color = TextPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text("Select Tap Strategy", color = colors.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
             text = {
                 Column {
-                    methods.forEach { (key, label) ->
+                    methods.forEach { (key, desc) ->
                         val isSelected = tapMethod == key
                         Row(
                             modifier = Modifier
@@ -475,34 +462,34 @@ fun SettingsScreen(
                                     viewModel.setTapMethod(key)
                                     showTapMethodDialog = false
                                 }
-                                .padding(vertical = 10.dp),
+                                .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
                                 contentDescription = null,
-                                tint = if (isSelected) PrimaryCyan else TextSecondary,
-                                modifier = Modifier.size(20.dp)
+                                tint = if (isSelected) colors.accent else colors.textSecondary,
+                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = label, color = if (isSelected) TextPrimary else TextSecondary, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(text = desc, color = if (isSelected) colors.text else colors.textSecondary, fontSize = 12.sp)
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showTapMethodDialog = false }) { Text("Cancel", color = PrimaryCyan) }
+                TextButton(onClick = { showTapMethodDialog = false }) { Text("Close", color = colors.accent, fontSize = 12.sp) }
             },
-            containerColor = DarkSurface
+            containerColor = colors.surface
         )
     }
 
-    // Reset filters confirmation
+    // Confirmation dialog for Reset
     if (showResetConfirmation) {
         AlertDialog(
             onDismissRequest = { showResetConfirmation = false },
-            title = { Text("Reset Filters", color = TextPrimary, fontWeight = FontWeight.Bold) },
-            text = { Text("Reset all distance, fare, and location rules back to defaults?", color = TextSecondary) },
+            title = { Text("Reset Filters", color = colors.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+            text = { Text("Are you sure you want to reset all driver filters to factory defaults?", color = colors.textSecondary, fontSize = 12.sp) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -510,48 +497,48 @@ fun SettingsScreen(
                         showResetConfirmation = false
                     }
                 ) {
-                    Text("Reset", color = AccentRedDanger, fontWeight = FontWeight.Bold)
+                    Text("Reset", color = colors.danger, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showResetConfirmation = false }) { Text("Cancel", color = TextSecondary) }
+                TextButton(onClick = { showResetConfirmation = false }) {
+                    Text("Cancel", color = colors.textSecondary, fontSize = 12.sp)
+                }
             },
-            containerColor = DarkSurface
+            containerColor = colors.surface
         )
     }
 }
 
 @Composable
-fun SettingsRow(
+fun SettingsClickableRow(
     icon: ImageVector,
+    tint: Icon3DTint,
     title: String,
-    subtitle: String,
+    value: String,
     onClick: () -> Unit
 ) {
+    val colors = LocalAppColors.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(46.dp)
+            .clip(RoundedCornerShape(10.dp))
             .clickable { onClick() }
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(DarkSurfaceElevated),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = PrimaryCyan, modifier = Modifier.size(18.dp))
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(text = title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(text = subtitle, color = TextSecondary, fontSize = 12.sp)
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon3D(icon = icon, tint = tint)
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(text = title, fontWeight = FontWeight.Medium, color = colors.text, fontSize = 13.sp)
         }
-        Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = value, color = colors.accent, fontSize = 12.sp)
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(13.dp))
+        }
     }
 }

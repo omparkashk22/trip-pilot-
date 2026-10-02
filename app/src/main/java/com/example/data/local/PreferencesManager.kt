@@ -23,6 +23,7 @@ class PreferencesManager(private val context: Context) {
 
     companion object {
         val KEY_DISCLAIMER_ACCEPTED = booleanPreferencesKey("disclaimer_accepted")
+        val KEY_ENGINE_ENABLED = booleanPreferencesKey("engine_enabled")
         val KEY_SERVICE_MODE = stringPreferencesKey("service_mode") // "auto_accept", "notify_only"
         val KEY_ALERT_ON_ACCEPT = booleanPreferencesKey("alert_on_accept")
         val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
@@ -67,6 +68,14 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setDisclaimerAccepted(accepted: Boolean) {
         context.dataStore.edit { it[KEY_DISCLAIMER_ACCEPTED] = accepted }
+    }
+
+    val engineEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_ENGINE_ENABLED] ?: false
+    }
+
+    suspend fun setEngineEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_ENGINE_ENABLED] = enabled }
     }
 
     val serviceMode: Flow<String> = context.dataStore.data.map {
@@ -147,7 +156,7 @@ class PreferencesManager(private val context: Context) {
 
     // Target App Package Mapping
     val resolvedBharatTaxiPackage: Flow<String?> = context.dataStore.data.map { it[KEY_BHARAT_TAXI_PACKAGE] }
-    val resolvedRapidoPackage: Flow<String?> = context.dataStore.data.map { it[KEY_RAPIDO_PACKAGE] ?: "com.rapido.rider" }
+    val resolvedRapidoPackage: Flow<String?> = context.dataStore.data.map { it[KEY_RAPIDO_PACKAGE] }
 
     suspend fun setResolvedPackage(appId: String, packageName: String) {
         context.dataStore.edit {

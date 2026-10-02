@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import com.example.TripPilotApp
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -98,7 +99,12 @@ fun DeveloperToolsScreen(
     val captureOnNext by viewModel.captureOnNextOffer.collectAsState()
     val isSimulatorVisible by viewModel.isSimulatorVisible.collectAsState()
 
-    var selectedAppToInspect by remember { mutableStateOf("com.rapido.rider") }
+    val resolvedBharat by TripPilotApp.resolvedBharatPackageLive.collectAsState()
+    val resolvedRapido by TripPilotApp.resolvedRapidoPackageLive.collectAsState()
+
+    var selectedAppToInspect by remember(resolvedRapido, resolvedBharat) {
+        mutableStateOf(resolvedRapido ?: resolvedBharat ?: "")
+    }
 
     LaunchedEffect(Unit) {
         viewModel.refreshExistingDumps(context)
@@ -164,13 +170,13 @@ fun DeveloperToolsScreen(
                         .padding(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    val isRapido = selectedAppToInspect == "com.rapido.rider"
+                    val isRapido = selectedAppToInspect == (resolvedRapido ?: "")
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isRapido) PrimaryCyan else Color.Transparent)
-                            .clickable { selectedAppToInspect = "com.rapido.rider" }
+                            .clickable { selectedAppToInspect = resolvedRapido ?: "" }
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -182,13 +188,13 @@ fun DeveloperToolsScreen(
                         )
                     }
 
-                    val isBharat = selectedAppToInspect != "com.rapido.rider"
+                    val isBharat = selectedAppToInspect == (resolvedBharat ?: "")
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isBharat) PrimaryCyan else Color.Transparent)
-                            .clickable { selectedAppToInspect = "com.bharat.taxi" }
+                            .clickable { selectedAppToInspect = resolvedBharat ?: "" }
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {

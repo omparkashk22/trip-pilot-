@@ -9,6 +9,7 @@ data class RideOffer(
     val baseFare: Double,
     val extraFare: Double = 0.0,
     val totalFare: Double = baseFare + extraFare,
+    val appFarePerKm: Double? = null,
     val pickupDistanceKm: Double,
     val pickupEtaMin: Int? = null,
     val dropDistanceKm: Double,

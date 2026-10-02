@@ -2,7 +2,6 @@ package com.example.ui.dashboard
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -10,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.TripPilotApp
 import com.example.data.local.PreferencesManager
+import com.example.data.model.AppRuntimeStatus
 import com.example.data.model.DriverFilter
 import com.example.data.repository.FilterRepository
 import com.example.service.OfferWatcherService
@@ -37,10 +37,23 @@ class DashboardViewModel(
     private val filterRepository: FilterRepository
 ) : ViewModel() {
 
-    val isServiceRunning: StateFlow<Boolean> = TripPilotApp.isServiceRunning
+    // Single source of truth for engine state
+    val isServiceRunning: StateFlow<Boolean> = TripPilotApp.engineState
     val currentForegroundApp: StateFlow<String?> = TripPilotApp.currentForegroundApp
     val detectionState: StateFlow<String> = TripPilotApp.detectionState
     val isOfferRecognitionFailed: StateFlow<Boolean> = TripPilotApp.offerRecognitionFailed
+
+    // Per-app runtime status map exposed to Dashboard
+    val appRuntimeStatuses: StateFlow<Map<String, AppRuntimeStatus>> = TripPilotApp.appRuntimeStatuses
+
+    val showDebugInfo: StateFlow<Boolean> = preferencesManager.showDebugInfo
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val resolvedBharatPackage: StateFlow<String?> = preferencesManager.resolvedBharatTaxiPackage
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val resolvedRapidoPackage: StateFlow<String?> = preferencesManager.resolvedRapidoPackage
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val serviceMode: StateFlow<String> = preferencesManager.serviceMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "auto_accept")
@@ -57,7 +70,7 @@ class DashboardViewModel(
     private val _isFilterSavedRecently = MutableStateFlow(false)
     val isFilterSavedRecently: StateFlow<Boolean> = _isFilterSavedRecently.asStateFlow()
 
-    // Temporary quick edit state
+    // Quick fare edit
     val quickMinFare = MutableStateFlow("80")
     val quickMaxFare = MutableStateFlow("")
     val quickUnlimitedMax = MutableStateFlow(true)
@@ -95,13 +108,18 @@ class DashboardViewModel(
         )
     }
 
-    fun toggleService(context: Context) {
+    fun startEngine(context: Context) {
         if (!permissions.value.areRequiredGranted) return
-
-        if (isServiceRunning.value) {
-            TripPilotForegroundService.stopService(context)
-        } else {
+        viewModelScope.launch {
+            preferencesManager.setEngineEnabled(true)
             TripPilotForegroundService.startService(context)
+        }
+    }
+
+    fun stopEngine(context: Context) {
+        viewModelScope.launch {
+            preferencesManager.setEngineEnabled(false)
+            TripPilotForegroundService.stopService(context)
         }
     }
 
@@ -133,5 +151,16 @@ class DashboardViewModel(
             delay(2000)
             _isFilterSavedRecently.value = false
         }
+    }
+
+    fun openApp(context: Context, packageName: String) {
+        try {
+            val intent = context.packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent != null) {
+                context.startActivity(intent)
+            }
+        } catch (_: Exception) {}
     }
 }

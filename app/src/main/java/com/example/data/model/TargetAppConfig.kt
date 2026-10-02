@@ -6,6 +6,8 @@ data class TargetAppConfig(
     val candidatePackages: List<String> = emptyList(),
     val labelKeywords: List<String> = emptyList(),
     val excludePackages: List<String> = emptyList(),
+    val variant1ViewIds: Map<String, String> = emptyMap(),
+    val neverClickIds: List<String> = emptyList(),
     val fareRegex: String = "",
     val distanceTimeRegex: String = "",
     val distanceRegex: String = "",

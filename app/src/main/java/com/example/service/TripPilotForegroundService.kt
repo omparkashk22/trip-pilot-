@@ -6,6 +6,9 @@ import android.content.Intent
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import com.example.TripPilotApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class TripPilotForegroundService : Service() {
 
@@ -25,7 +28,15 @@ class TripPilotForegroundService : Service() {
             val intent = Intent(context, TripPilotForegroundService::class.java).apply {
                 action = ACTION_STOP
             }
-            context.stopService(intent)
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {
+                // If service is not running or restricted
+                CoroutineScope(Dispatchers.IO).launch {
+                    TripPilotApp.instance.preferencesManager.setEngineEnabled(false)
+                }
+                TripPilotApp.engineState.value = false
+            }
         }
     }
 
@@ -38,7 +49,10 @@ class TripPilotForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            TripPilotApp.isServiceRunning.value = false
+            TripPilotApp.engineState.value = false
+            CoroutineScope(Dispatchers.IO).launch {
+                TripPilotApp.instance.preferencesManager.setEngineEnabled(false)
+            }
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -46,13 +60,15 @@ class TripPilotForegroundService : Service() {
 
         val notification = overlayNotificationManager.createForegroundNotification()
         startForeground(NOTIFICATION_ID, notification)
-        TripPilotApp.isServiceRunning.value = true
+        TripPilotApp.engineState.value = true
+        CoroutineScope(Dispatchers.IO).launch {
+            TripPilotApp.instance.preferencesManager.setEngineEnabled(true)
+        }
 
         return START_STICKY
     }
 
     override fun onDestroy() {
-        TripPilotApp.isServiceRunning.value = false
         super.onDestroy()
     }
 

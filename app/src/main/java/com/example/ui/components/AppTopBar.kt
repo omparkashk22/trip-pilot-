@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,52 +10,49 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Navigation
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.TabPosition
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-import com.example.ui.theme.BorderDivider
-import com.example.ui.theme.DarkBackground
-import com.example.ui.theme.PrimaryCyan
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.LocalAppColors
 
 enum class MainTab(val titleRes: Int, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    DASHBOARD(R.string.tab_dashboard, Icons.Default.Dashboard),
-    FILTERS(R.string.tab_filters, Icons.Default.FilterList),
-    APPS(R.string.tab_apps, Icons.Default.Apps),
-    HISTORY(R.string.tab_history, Icons.Default.History),
-    SETTINGS(R.string.tab_settings, Icons.Default.Settings)
+    DASHBOARD(R.string.tab_dashboard, Icons.Outlined.Dashboard),
+    FILTERS(R.string.tab_filters, Icons.Outlined.FilterList),
+    APPS(R.string.tab_apps, Icons.Outlined.Apps),
+    HISTORY(R.string.tab_history, Icons.Outlined.History),
+    SETTINGS(R.string.tab_settings, Icons.Outlined.Settings)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,41 +62,38 @@ fun AppTopBar(
     onTabSelected: (MainTab) -> Unit,
     onProfileClick: () -> Unit
 ) {
+    val colors = LocalAppColors.current
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DarkBackground)
+            .background(colors.background)
     ) {
         TopAppBar(
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(30.dp)
                             .clip(CircleShape)
-                            .background(PrimaryCyan.copy(alpha = 0.2f)),
+                            .background(colors.accent.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Navigation,
+                            imageVector = Icons.Outlined.Navigation,
                             contentDescription = "Logo",
-                            tint = PrimaryCyan,
-                            modifier = Modifier.size(20.dp)
+                            tint = colors.accent,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
                             text = "TripPilot",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-                        )
-                        Text(
-                            text = stringResource(R.string.app_tagline),
-                            fontSize = 11.sp,
-                            color = TextSecondary
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 17.sp,
+                            color = colors.text,
+                            lineHeight = 22.sp
                         )
                     }
                 }
@@ -107,66 +104,101 @@ fun AppTopBar(
                     modifier = Modifier.testTag("profile_icon_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.AccountCircle,
+                        imageVector = Icons.Outlined.AccountCircle,
                         contentDescription = "Profile",
-                        tint = PrimaryCyan,
-                        modifier = Modifier.size(32.dp)
+                        tint = colors.accent,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = DarkBackground
+                containerColor = colors.background
             )
         )
 
-        // Scrollable Tab Row with 5 tabs and cyan underline
-        ScrollableTabRow(
+        // Tab Row with row height 44dp, 18dp line icons above 10.5sp label, slim 2dp sliding indicator
+        TabRow(
             selectedTabIndex = selectedTab.ordinal,
-            containerColor = DarkBackground,
-            contentColor = TextPrimary,
-            edgePadding = 12.dp,
+            containerColor = colors.background,
+            contentColor = colors.text,
             divider = {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(BorderDivider)
+                        .background(colors.hairline)
                 )
             },
             indicator = { tabPositions ->
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab.ordinal]),
-                    height = 3.dp,
-                    color = PrimaryCyan
-                )
-            }
+                SlidingTabIndicator(positions = tabPositions, selectedIndex = selectedTab.ordinal)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
         ) {
             MainTab.entries.forEach { tab ->
                 val isSelected = selectedTab == tab
                 Tab(
                     selected = isSelected,
                     onClick = { onTabSelected(tab) },
-                    modifier = Modifier.testTag("tab_${tab.name.lowercase()}"),
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = null,
-                                tint = if (isSelected) PrimaryCyan else TextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = stringResource(tab.titleRes),
-                                maxLines = 1,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) PrimaryCyan else TextSecondary,
-                                fontSize = 14.sp
-                            )
-                        }
+                    modifier = Modifier
+                        .height(44.dp)
+                        .testTag("tab_${tab.name.lowercase()}"),
+                    selectedContentColor = colors.accent,
+                    unselectedContentColor = colors.textSecondary
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = null,
+                            tint = if (isSelected) colors.accent else colors.textSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = stringResource(tab.titleRes),
+                            maxLines = 1,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isSelected) colors.accent else colors.textSecondary,
+                            fontSize = 10.5.sp,
+                            lineHeight = 13.sp
+                        )
                     }
-                )
+                }
             }
         }
     }
+}
+
+@Composable
+fun SlidingTabIndicator(
+    positions: List<TabPosition>,
+    selectedIndex: Int
+) {
+    val colors = LocalAppColors.current
+    if (selectedIndex >= positions.size) return
+    val currentPosition = positions[selectedIndex]
+
+    val leftOffset by animateDpAsState(
+        targetValue = currentPosition.left,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "tab_indicator_left"
+    )
+    val width by animateDpAsState(
+        targetValue = currentPosition.width,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "tab_indicator_width"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .wrapContentSize(Alignment.BottomStart)
+            .offset(x = leftOffset)
+            .width(width)
+            .height(2.dp)
+            .background(colors.accent)
+    )
 }

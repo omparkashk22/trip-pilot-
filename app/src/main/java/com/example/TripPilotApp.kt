@@ -5,16 +5,22 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import com.example.data.local.AppDatabase
 import com.example.data.local.AppResolver
 import com.example.data.local.PreferencesManager
+import com.example.data.model.AppRuntimeState
+import com.example.data.model.AppRuntimeStatus
 import com.example.data.remote.FirebaseManager
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.FilterRepository
 import com.example.data.repository.RideLogRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class TripPilotApp : Application() {
 
@@ -40,12 +46,33 @@ class TripPilotApp : Application() {
         lateinit var instance: TripPilotApp
             private set
 
-        // Global live engine status flows observed by UI & updated by OfferWatcherService
-        val isServiceRunning = MutableStateFlow(false)
+        // Single source of truth for engine state, backed by DataStore engineEnabled
+        val engineState = MutableStateFlow(false)
+        val isServiceRunning: MutableStateFlow<Boolean> get() = engineState
+
         val currentForegroundApp = MutableStateFlow<String?>(null) // e.g. "Bharat Taxi", "Rapido", null
         val detectionState = MutableStateFlow("Idle") // "Idle", "Watching", "Offer detected", "Offer screen not recognized"
         val offerRecognitionFailed = MutableStateFlow(false)
+
+        val resolvedBharatPackageLive = MutableStateFlow<String?>(null)
+        val resolvedRapidoPackageLive = MutableStateFlow<String?>(null)
+
+        val defaultRuntimeStatuses = mapOf(
+            "bharat_taxi" to AppRuntimeStatus(
+                appId = "bharat_taxi",
+                displayName = "Bharat Taxi",
+                state = AppRuntimeState.NOT_INSTALLED
+            ),
+            "rapido" to AppRuntimeStatus(
+                appId = "rapido",
+                displayName = "Rapido",
+                state = AppRuntimeState.NOT_INSTALLED
+            )
+        )
+        val appRuntimeStatuses = MutableStateFlow<Map<String, AppRuntimeStatus>>(defaultRuntimeStatuses)
     }
+
+    private val appScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
@@ -60,6 +87,71 @@ class TripPilotApp : Application() {
         rideLogRepository = RideLogRepository(database.rideLogDao())
         filterRepository = FilterRepository(preferencesManager)
         authRepository = AuthRepository(firebaseManager)
+
+        // Observe DataStore engineEnabled as the single source of truth for engineState
+        appScope.launch {
+            preferencesManager.engineEnabled.collect { enabled ->
+                engineState.value = enabled
+                if (!enabled) {
+                    detectionState.value = "Idle"
+                    currentForegroundApp.value = null
+                    offerRecognitionFailed.value = false
+                    val current = appRuntimeStatuses.value.toMutableMap()
+                    current.forEach { (k, v) ->
+                        if (v.state == AppRuntimeState.FOREGROUND || v.state == AppRuntimeState.OFFER_DETECTED || v.state == AppRuntimeState.NOT_RECOGNIZED) {
+                            current[k] = v.copy(state = AppRuntimeState.IDLE)
+                        }
+                    }
+                    appRuntimeStatuses.value = current
+                }
+            }
+        }
+
+        // Resolve and log target packages at startup
+        appScope.launch(Dispatchers.IO) {
+            val configs = appResolver.loadTargetConfigs()
+            for (config in configs) {
+                val savedPkg = if (config.appId == "bharat_taxi") {
+                    preferencesManager.resolvedBharatTaxiPackage.first()
+                } else {
+                    preferencesManager.resolvedRapidoPackage.first()
+                }
+                val resolved = appResolver.resolvePackageForTarget(config, savedPkg)
+                Log.i("TripPilotApp", "Startup resolved package for ${config.appId}: $resolved")
+
+                if (config.appId == "bharat_taxi") {
+                    resolvedBharatPackageLive.value = resolved
+                } else if (config.appId == "rapido") {
+                    resolvedRapidoPackageLive.value = resolved
+                }
+
+                if (resolved != null && resolved != savedPkg) {
+                    preferencesManager.setResolvedPackage(config.appId, resolved)
+                }
+
+                // Update initial runtime status with installation and package info
+                val current = appRuntimeStatuses.value.toMutableMap()
+                val existing = current[config.appId] ?: AppRuntimeStatus(config.appId, config.displayName)
+                val isInstalled = resolved != null
+                val isEnabled = if (config.appId == "bharat_taxi") {
+                    preferencesManager.isBharatTaxiEnabled.first()
+                } else {
+                    preferencesManager.isRapidoEnabled.first()
+                }
+                val initialState = when {
+                    !isInstalled -> AppRuntimeState.NOT_INSTALLED
+                    !isEnabled -> AppRuntimeState.PAUSED
+                    else -> AppRuntimeState.IDLE
+                }
+                current[config.appId] = existing.copy(
+                    resolvedPackage = resolved,
+                    isInstalled = isInstalled,
+                    isEnabled = isEnabled,
+                    state = initialState
+                )
+                appRuntimeStatuses.value = current
+            }
+        }
     }
 
     private fun createNotificationChannels() {

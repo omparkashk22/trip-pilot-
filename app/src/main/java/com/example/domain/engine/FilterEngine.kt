@@ -22,9 +22,15 @@ object FilterEngine {
 
         // 2. Allowed Ride Types
         if (filter.allowedRideTypes.isNotEmpty()) {
-            val matchesType = filter.allowedRideTypes.any { it.equals(offer.rideType, ignoreCase = true) }
+            val offerTypeClean = offer.rideType.trim().replace("\\s+".toRegex(), " ")
+            val matchesType = filter.allowedRideTypes.any { allowed ->
+                val allowedClean = allowed.trim().replace("\\s+".toRegex(), " ")
+                offerTypeClean.equals(allowedClean, ignoreCase = true) ||
+                        offerTypeClean.contains(allowedClean, ignoreCase = true) ||
+                        allowedClean.contains(offerTypeClean, ignoreCase = true)
+            }
             if (!matchesType) {
-                return FilterEvaluationResult(false, "Ride type '${offer.rideType}' not allowed")
+                return FilterEvaluationResult(false, "Ride type not allowed")
             }
         }
 

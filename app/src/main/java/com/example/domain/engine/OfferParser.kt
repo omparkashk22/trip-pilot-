@@ -54,14 +54,19 @@ object OfferParser {
         val bounds = Rect()
         try { node.getBoundsInScreen(bounds) } catch (_: Exception) {}
 
-        if (combinedText.isNotBlank()) {
+        val viewId = try { node.viewIdResourceName } catch (_: Exception) { null }
+        val className = try { node.className?.toString() } catch (_: Exception) { null }
+
+        if (combinedText.isNotBlank() || !viewId.isNullOrEmpty()) {
             list.add(
                 ParsedNode(
                     node = node,
                     text = combinedText,
                     bounds = bounds,
                     isVisibleToUser = node.isVisibleToUser,
-                    isClickable = node.isClickable
+                    isClickable = node.isClickable,
+                    viewId = viewId,
+                    className = className
                 )
             )
         }
