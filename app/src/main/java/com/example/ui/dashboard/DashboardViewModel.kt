@@ -46,6 +46,9 @@ class DashboardViewModel(
     // Per-app runtime status map exposed to Dashboard
     val appRuntimeStatuses: StateFlow<Map<String, AppRuntimeStatus>> = TripPilotApp.appRuntimeStatuses
 
+    // GitHub Release Update Info
+    val updateInfo: StateFlow<com.example.data.remote.AppUpdateInfo?> = TripPilotApp.updateInfoLive
+
     val showDebugInfo: StateFlow<Boolean> = preferencesManager.showDebugInfo
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -162,5 +165,28 @@ class DashboardViewModel(
                 context.startActivity(intent)
             }
         } catch (_: Exception) {}
+    }
+
+    fun dismissUpdateBanner() {
+        TripPilotApp.updateInfoLive.value = null
+    }
+
+    fun checkForUpdatesManual(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val checker = com.example.data.remote.VersionChecker()
+                val info = checker.checkLatestRelease(com.example.BuildConfig.VERSION_NAME)
+                if (info != null && info.isUpdateAvailable) {
+                    TripPilotApp.updateInfoLive.value = info
+                    onResult(true, "Update found: v${info.latestVersion}")
+                } else if (info != null) {
+                    onResult(false, "TripPilot is up to date (v${com.example.BuildConfig.VERSION_NAME})")
+                } else {
+                    onResult(false, "Unable to reach GitHub. Try again later.")
+                }
+            } catch (e: Exception) {
+                onResult(false, "Check failed: ${e.message}")
+            }
+        }
     }
 }

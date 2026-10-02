@@ -175,7 +175,7 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
                 minFarePerKm = minRate,
                 isLocationFilterEnabled = isLocationFilterEnabled.value,
                 locationKeywords = locationKeywords.value,
-                allowedRideTypes = allowedRideTypes.value,
+                allowedRideTypes = emptySet(),
                 multipleMatchStrategy = multipleMatchStrategy.value
             )
             filterRepository.saveFilter(updated)

@@ -59,6 +59,38 @@ class SettingsViewModel(
     val isSimulatorVisible = MutableStateFlow(false)
     val simulatorTapResult = MutableStateFlow<String?>(null)
 
+    // Version update check state
+    val isCheckingForUpdate = MutableStateFlow(false)
+    val updateCheckResult = MutableStateFlow<String?>(null)
+    val latestUpdateInfo = MutableStateFlow<com.example.data.remote.AppUpdateInfo?>(null)
+
+    fun checkForUpdates() {
+        if (isCheckingForUpdate.value) return
+        viewModelScope.launch {
+            isCheckingForUpdate.value = true
+            updateCheckResult.value = null
+            try {
+                val checker = com.example.data.remote.VersionChecker()
+                val info = checker.checkLatestRelease(com.example.BuildConfig.VERSION_NAME)
+                if (info != null && info.isUpdateAvailable) {
+                    latestUpdateInfo.value = info
+                    com.example.TripPilotApp.updateInfoLive.value = info
+                    updateCheckResult.value = "New version available: v${info.latestVersion}"
+                } else if (info != null) {
+                    latestUpdateInfo.value = null
+                    updateCheckResult.value = "TripPilot is up to date (v${com.example.BuildConfig.VERSION_NAME})"
+                } else {
+                    latestUpdateInfo.value = null
+                    updateCheckResult.value = "Unable to reach GitHub. Check internet connection."
+                }
+            } catch (e: Exception) {
+                updateCheckResult.value = "Check failed: ${e.message}"
+            } finally {
+                isCheckingForUpdate.value = false
+            }
+        }
+    }
+
     fun setLanguage(code: String) {
         viewModelScope.launch {
             preferencesManager.setLanguage(code)

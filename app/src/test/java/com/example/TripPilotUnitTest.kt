@@ -550,4 +550,40 @@ class TripPilotUnitTest {
         assertEquals(now - 10_000L, status.lastOfferParsedAt)
         assertEquals("Accepted", status.lastDecision)
     }
+
+    @Test
+    fun testVersionChecker_isNewerVersion() {
+        // Newer versions
+        assertTrue(com.example.data.remote.VersionChecker.isNewerVersion("1.0", "1.1"))
+        assertTrue(com.example.data.remote.VersionChecker.isNewerVersion("1.0", "1.0.1"))
+        assertTrue(com.example.data.remote.VersionChecker.isNewerVersion("1.0", "v1.0.1"))
+        assertTrue(com.example.data.remote.VersionChecker.isNewerVersion("v1.0.0", "v1.0.1"))
+        assertTrue(com.example.data.remote.VersionChecker.isNewerVersion("1.0.0", "2.0.0"))
+        assertTrue(com.example.data.remote.VersionChecker.isNewerVersion("0.9.5", "1.0"))
+
+        // Same or older versions
+        assertFalse(com.example.data.remote.VersionChecker.isNewerVersion("1.0", "1.0"))
+        assertFalse(com.example.data.remote.VersionChecker.isNewerVersion("v1.0", "1.0"))
+        assertFalse(com.example.data.remote.VersionChecker.isNewerVersion("1.0.1", "1.0.0"))
+        assertFalse(com.example.data.remote.VersionChecker.isNewerVersion("2.0.0", "1.9.9"))
+        assertFalse(com.example.data.remote.VersionChecker.isNewerVersion("1.2.0", "1.1.9"))
+    }
+
+    @Test
+    fun testAppUpdateInfo_properties() {
+        val updateInfo = com.example.data.remote.AppUpdateInfo(
+            currentVersion = "1.0",
+            latestVersion = "1.1",
+            releaseTitle = "TripPilot v1.1",
+            releaseNotes = "New features & bug fixes",
+            downloadUrl = "https://github.com/omparkashk22/trip-pilot-/releases/download/v1.1/trippilot.apk",
+            releasePageUrl = "https://github.com/omparkashk22/trip-pilot-/releases/tag/v1.1",
+            isUpdateAvailable = true
+        )
+
+        assertEquals("1.0", updateInfo.currentVersion)
+        assertEquals("1.1", updateInfo.latestVersion)
+        assertTrue(updateInfo.isUpdateAvailable)
+        assertTrue(updateInfo.downloadUrl.endsWith(".apk"))
+    }
 }

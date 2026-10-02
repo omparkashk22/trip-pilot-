@@ -24,19 +24,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Rule
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -51,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -79,6 +85,10 @@ fun SettingsScreen(
     val processTestRequests by viewModel.processTestRequests.collectAsState()
     val tapMethod by viewModel.tapMethod.collectAsState()
     val showDebugInfo by viewModel.showDebugInfo.collectAsState()
+
+    val isCheckingForUpdate by viewModel.isCheckingForUpdate.collectAsState()
+    val updateCheckResult by viewModel.updateCheckResult.collectAsState()
+    val latestUpdateInfo by viewModel.latestUpdateInfo.collectAsState()
 
     var showLangDialog by remember { mutableStateOf(false) }
     var showTapMethodDialog by remember { mutableStateOf(false) }
@@ -336,7 +346,90 @@ fun SettingsScreen(
                 fontSize = 11.sp
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Check for Updates button
+            OutlinedButton(
+                onClick = viewModel::checkForUpdates,
+                enabled = !isCheckingForUpdate,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, colors.accent),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = colors.accent,
+                    disabledContentColor = colors.textSecondary
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp)
+                    .testTag("check_for_updates_button")
+            ) {
+                if (isCheckingForUpdate) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = colors.accent,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Checking GitHub...", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.SystemUpdate,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Check for Updates", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            if (updateCheckResult != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = if (latestUpdateInfo != null) colors.accent.copy(alpha = 0.12f) else colors.surface2,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, if (latestUpdateInfo != null) colors.accent.copy(alpha = 0.4f) else colors.hairline),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = updateCheckResult.orEmpty(),
+                            color = if (latestUpdateInfo != null) colors.accent else colors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        if (latestUpdateInfo != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    val url = latestUpdateInfo?.downloadUrl ?: latestUpdateInfo?.releasePageUrl ?: ""
+                                    if (url.isNotEmpty()) {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        try { context.startActivity(intent) } catch (_: Exception) {}
+                                    }
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colors.accent,
+                                    contentColor = Color(0xFF060B18)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp)
+                                    .testTag("download_update_button_settings")
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Download APK (v${latestUpdateInfo?.latestVersion})", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(

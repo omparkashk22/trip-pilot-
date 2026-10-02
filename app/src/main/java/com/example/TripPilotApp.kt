@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class TripPilotApp : Application() {
@@ -70,6 +71,8 @@ class TripPilotApp : Application() {
             )
         )
         val appRuntimeStatuses = MutableStateFlow<Map<String, AppRuntimeStatus>>(defaultRuntimeStatuses)
+
+        val updateInfoLive = MutableStateFlow<com.example.data.remote.AppUpdateInfo?>(null)
     }
 
     private val appScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -87,6 +90,22 @@ class TripPilotApp : Application() {
         rideLogRepository = RideLogRepository(database.rideLogDao())
         filterRepository = FilterRepository(preferencesManager)
         authRepository = AuthRepository(firebaseManager)
+
+        // Periodic GitHub version check (on startup and every 6 hours)
+        appScope.launch(Dispatchers.IO) {
+            val versionChecker = com.example.data.remote.VersionChecker()
+            while (isActive) {
+                try {
+                    val info = versionChecker.checkLatestRelease(BuildConfig.VERSION_NAME)
+                    if (info != null && info.isUpdateAvailable) {
+                        updateInfoLive.value = info
+                    }
+                } catch (e: Exception) {
+                    Log.w("TripPilotApp", "Version check failed: ${e.message}")
+                }
+                kotlinx.coroutines.delay(6 * 3600 * 1000L)
+            }
+        }
 
         // Observe DataStore engineEnabled as the single source of truth for engineState
         appScope.launch {
