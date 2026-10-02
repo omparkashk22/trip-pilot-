@@ -1,5 +1,7 @@
 # TripPilot - Smart Driver Assistant for Bharat Taxi & Rapido
 
+**Repository**: [https://github.com/omparkashk22/trip-pilot-](https://github.com/omparkashk22/trip-pilot-)
+
 TripPilot is a Kotlin & Jetpack Compose Android application designed for commercial cab and bike taxi drivers in India. It monitors incoming ride offers on screen using an Accessibility Service, parses fares, pickup & destination details, evaluates them against custom distance/fare/location filters, and automatically accepts profitable trips or displays heads-up alerts.
 
 ---
