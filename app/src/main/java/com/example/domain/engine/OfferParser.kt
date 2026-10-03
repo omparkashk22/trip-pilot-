@@ -42,39 +42,53 @@ object OfferParser {
         }
     }
 
-    private fun traverseNode(node: AccessibilityNodeInfo, list: MutableList<ParsedNode>) {
-        val text = node.text?.toString() ?: ""
-        val contentDesc = node.contentDescription?.toString() ?: ""
-        val combinedText = when {
-            text.isNotEmpty() && contentDesc.isNotEmpty() && text != contentDesc -> "$text $contentDesc"
-            text.isNotEmpty() -> text
-            else -> contentDesc
-        }
+    private fun traverseNode(root: AccessibilityNodeInfo, list: MutableList<ParsedNode>) {
+        val stack = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
+        stack.addLast(root to 0)
 
-        val bounds = Rect()
-        try { node.getBoundsInScreen(bounds) } catch (_: Exception) {}
+        while (stack.isNotEmpty() && list.size < 600) {
+            val (node, depth) = stack.removeLast()
+            if (depth > 40) continue
 
-        val viewId = try { node.viewIdResourceName } catch (_: Exception) { null }
-        val className = try { node.className?.toString() } catch (_: Exception) { null }
+            val viewId = try { node.viewIdResourceName } catch (_: Exception) { null }
+            if (viewId?.contains("floating_layout") == true) {
+                continue
+            }
 
-        if (combinedText.isNotBlank() || !viewId.isNullOrEmpty()) {
-            list.add(
-                ParsedNode(
-                    node = node,
-                    text = combinedText,
-                    bounds = bounds,
-                    isVisibleToUser = node.isVisibleToUser,
-                    isClickable = node.isClickable,
-                    viewId = viewId,
-                    className = className
+            val text = node.text?.toString() ?: ""
+            val contentDesc = node.contentDescription?.toString() ?: ""
+            val combinedText = when {
+                text.isNotEmpty() && contentDesc.isNotEmpty() && text != contentDesc -> "$text $contentDesc"
+                text.isNotEmpty() -> text
+                else -> contentDesc
+            }
+
+            val bounds = Rect()
+            try { node.getBoundsInScreen(bounds) } catch (_: Exception) {}
+            val className = try { node.className?.toString() } catch (_: Exception) { null }
+
+            if (combinedText.isNotBlank() || !viewId.isNullOrEmpty()) {
+                list.add(
+                    ParsedNode(
+                        node = node,
+                        text = combinedText,
+                        bounds = bounds,
+                        isVisibleToUser = node.isVisibleToUser,
+                        isClickable = node.isClickable,
+                        viewId = viewId,
+                        className = className,
+                        depth = depth
+                    )
                 )
-            )
-        }
+            }
 
-        for (i in 0 until node.childCount) {
-            val child = try { node.getChild(i) } catch (_: Exception) { null }
-            if (child != null) {
-                traverseNode(child, list)
+            val childCount = try { node.childCount } catch (_: Exception) { 0 }
+            for (i in childCount - 1 downTo 0) {
+                if (list.size >= 600) break
+                val child = try { node.getChild(i) } catch (_: Exception) { null }
+                if (child != null) {
+                    stack.addLast(child to (depth + 1))
+                }
             }
         }
     }

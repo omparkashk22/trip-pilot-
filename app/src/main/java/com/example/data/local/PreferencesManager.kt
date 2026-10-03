@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -13,6 +14,7 @@ import com.example.data.model.DriverFilter
 import com.example.data.model.LocationKeyword
 import com.example.data.model.StrategyStats
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
@@ -54,6 +56,7 @@ class PreferencesManager(private val context: Context) {
         // Settings & Dev tools
         val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
         val KEY_APP_THEME = stringPreferencesKey("app_theme")
+        val KEY_TEXT_SCALE = floatPreferencesKey("text_scale")
         val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val KEY_PROCESS_TEST_REQUESTS = booleanPreferencesKey("process_test_requests")
         val KEY_TAP_METHOD = stringPreferencesKey("tap_method")
@@ -64,7 +67,7 @@ class PreferencesManager(private val context: Context) {
 
     val isDisclaimerAccepted: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_DISCLAIMER_ACCEPTED] ?: false
-    }
+    }.distinctUntilChanged()
 
     suspend fun setDisclaimerAccepted(accepted: Boolean) {
         context.dataStore.edit { it[KEY_DISCLAIMER_ACCEPTED] = accepted }
@@ -72,7 +75,7 @@ class PreferencesManager(private val context: Context) {
 
     val engineEnabled: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_ENGINE_ENABLED] ?: false
-    }
+    }.distinctUntilChanged()
 
     suspend fun setEngineEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_ENGINE_ENABLED] = enabled }
@@ -80,7 +83,7 @@ class PreferencesManager(private val context: Context) {
 
     val serviceMode: Flow<String> = context.dataStore.data.map {
         it[KEY_SERVICE_MODE] ?: "auto_accept"
-    }
+    }.distinctUntilChanged()
 
     suspend fun setServiceMode(mode: String) {
         context.dataStore.edit { it[KEY_SERVICE_MODE] = mode }
@@ -88,10 +91,26 @@ class PreferencesManager(private val context: Context) {
 
     val alertOnAccept: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_ALERT_ON_ACCEPT] ?: true
-    }
+    }.distinctUntilChanged()
 
     suspend fun setAlertOnAccept(enabled: Boolean) {
         context.dataStore.edit { it[KEY_ALERT_ON_ACCEPT] = enabled }
+    }
+
+    val isSoundEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_SOUND_ENABLED] ?: true
+    }.distinctUntilChanged()
+
+    suspend fun setSoundEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SOUND_ENABLED] = enabled }
+    }
+
+    val isVibrationEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_VIBRATION_ENABLED] ?: true
+    }.distinctUntilChanged()
+
+    suspend fun setVibrationEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_VIBRATION_ENABLED] = enabled }
     }
 
     val driverFilter: Flow<DriverFilter> = context.dataStore.data.map { prefs ->
@@ -121,7 +140,7 @@ class PreferencesManager(private val context: Context) {
             allowedRideTypes = prefs[KEY_ALLOWED_RIDE_TYPES] ?: emptySet(),
             multipleMatchStrategy = prefs[KEY_MATCH_STRATEGY] ?: "first_match"
         )
-    }
+    }.distinctUntilChanged()
 
     suspend fun saveDriverFilter(filter: DriverFilter) {
         context.dataStore.edit { prefs ->
@@ -155,8 +174,8 @@ class PreferencesManager(private val context: Context) {
     }
 
     // Target App Package Mapping
-    val resolvedBharatTaxiPackage: Flow<String?> = context.dataStore.data.map { it[KEY_BHARAT_TAXI_PACKAGE] }
-    val resolvedRapidoPackage: Flow<String?> = context.dataStore.data.map { it[KEY_RAPIDO_PACKAGE] }
+    val resolvedBharatTaxiPackage: Flow<String?> = context.dataStore.data.map { it[KEY_BHARAT_TAXI_PACKAGE] }.distinctUntilChanged()
+    val resolvedRapidoPackage: Flow<String?> = context.dataStore.data.map { it[KEY_RAPIDO_PACKAGE] }.distinctUntilChanged()
 
     suspend fun setResolvedPackage(appId: String, packageName: String) {
         context.dataStore.edit {
@@ -165,8 +184,8 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
-    val isBharatTaxiEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_BHARAT_TAXI_ENABLED] ?: true }
-    val isRapidoEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_RAPIDO_ENABLED] ?: true }
+    val isBharatTaxiEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_BHARAT_TAXI_ENABLED] ?: true }.distinctUntilChanged()
+    val isRapidoEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_RAPIDO_ENABLED] ?: true }.distinctUntilChanged()
 
     suspend fun setAppEnabled(appId: String, enabled: Boolean) {
         context.dataStore.edit {
@@ -176,25 +195,28 @@ class PreferencesManager(private val context: Context) {
     }
 
     // App Preferences
-    val theme: Flow<String> = context.dataStore.data.map { it[KEY_APP_THEME] ?: "dark" }
+    val theme: Flow<String> = context.dataStore.data.map { it[KEY_APP_THEME] ?: "dark" }.distinctUntilChanged()
     suspend fun setTheme(theme: String) { context.dataStore.edit { it[KEY_APP_THEME] = theme } }
 
-    val language: Flow<String> = context.dataStore.data.map { it[KEY_APP_LANGUAGE] ?: "en" }
+    val textScale: Flow<Float> = context.dataStore.data.map { it[KEY_TEXT_SCALE] ?: 1.0f }.distinctUntilChanged()
+    suspend fun setTextScale(scale: Float) { context.dataStore.edit { it[KEY_TEXT_SCALE] = scale } }
+
+    val language: Flow<String> = context.dataStore.data.map { it[KEY_APP_LANGUAGE] ?: "en" }.distinctUntilChanged()
     suspend fun setLanguage(lang: String) { context.dataStore.edit { it[KEY_APP_LANGUAGE] = lang } }
 
-    val tapMethod: Flow<String> = context.dataStore.data.map { it[KEY_TAP_METHOD] ?: "auto" }
+    val tapMethod: Flow<String> = context.dataStore.data.map { it[KEY_TAP_METHOD] ?: "auto" }.distinctUntilChanged()
     suspend fun setTapMethod(method: String) { context.dataStore.edit { it[KEY_TAP_METHOD] = method } }
 
-    val showDebugInfo: Flow<Boolean> = context.dataStore.data.map { it[KEY_SHOW_DEBUG_INFO] ?: false }
+    val showDebugInfo: Flow<Boolean> = context.dataStore.data.map { it[KEY_SHOW_DEBUG_INFO] ?: false }.distinctUntilChanged()
     suspend fun setShowDebugInfo(show: Boolean) { context.dataStore.edit { it[KEY_SHOW_DEBUG_INFO] = show } }
 
-    val processTestRequests: Flow<Boolean> = context.dataStore.data.map { it[KEY_PROCESS_TEST_REQUESTS] ?: true }
+    val processTestRequests: Flow<Boolean> = context.dataStore.data.map { it[KEY_PROCESS_TEST_REQUESTS] ?: true }.distinctUntilChanged()
     suspend fun setProcessTestRequests(process: Boolean) { context.dataStore.edit { it[KEY_PROCESS_TEST_REQUESTS] = process } }
 
-    val keepScreenOn: Flow<Boolean> = context.dataStore.data.map { it[KEY_KEEP_SCREEN_ON] ?: false }
+    val keepScreenOn: Flow<Boolean> = context.dataStore.data.map { it[KEY_KEEP_SCREEN_ON] ?: false }.distinctUntilChanged()
     suspend fun setKeepScreenOn(keep: Boolean) { context.dataStore.edit { it[KEY_KEEP_SCREEN_ON] = keep } }
 
-    val captureOnNextOffer: Flow<Boolean> = context.dataStore.data.map { it[KEY_CAPTURE_ON_NEXT_OFFER] ?: false }
+    val captureOnNextOffer: Flow<Boolean> = context.dataStore.data.map { it[KEY_CAPTURE_ON_NEXT_OFFER] ?: false }.distinctUntilChanged()
     suspend fun setCaptureOnNextOffer(capture: Boolean) { context.dataStore.edit { it[KEY_CAPTURE_ON_NEXT_OFFER] = capture } }
 
     // Strategy calibration stats

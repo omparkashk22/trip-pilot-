@@ -32,6 +32,9 @@ class SettingsViewModel(
     val currentTheme: StateFlow<String> = preferencesManager.theme
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "dark")
 
+    val textScale: StateFlow<Float> = preferencesManager.textScale
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1.0f)
+
     val keepScreenOn: StateFlow<Boolean> = preferencesManager.keepScreenOn
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -40,6 +43,12 @@ class SettingsViewModel(
 
     val tapMethod: StateFlow<String> = preferencesManager.tapMethod
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "auto")
+
+    val soundEnabled: StateFlow<Boolean> = preferencesManager.isSoundEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val vibrationEnabled: StateFlow<Boolean> = preferencesManager.isVibrationEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     val showDebugInfo: StateFlow<Boolean> = preferencesManager.showDebugInfo
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -103,6 +112,12 @@ class SettingsViewModel(
         }
     }
 
+    fun setTextScale(scale: Float) {
+        viewModelScope.launch {
+            preferencesManager.setTextScale(scale)
+        }
+    }
+
     fun setKeepScreenOn(enabled: Boolean) {
         viewModelScope.launch {
             preferencesManager.setKeepScreenOn(enabled)
@@ -118,6 +133,18 @@ class SettingsViewModel(
     fun setTapMethod(method: String) {
         viewModelScope.launch {
             preferencesManager.setTapMethod(method)
+        }
+    }
+
+    fun setSoundEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setSoundEnabled(enabled)
+        }
+    }
+
+    fun setVibrationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setVibrationEnabled(enabled)
         }
     }
 

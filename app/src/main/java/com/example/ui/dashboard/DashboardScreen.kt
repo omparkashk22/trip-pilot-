@@ -115,6 +115,8 @@ fun DashboardScreen(
     val isOfferNotRecognized by viewModel.isOfferRecognitionFailed.collectAsState()
     val serviceMode by viewModel.serviceMode.collectAsState()
     val alertOnAccept by viewModel.alertOnAccept.collectAsState()
+    val soundEnabled by viewModel.soundEnabled.collectAsState()
+    val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
     val permissions by viewModel.permissions.collectAsState()
     val isFilterSavedRecently by viewModel.isFilterSavedRecently.collectAsState()
     val showDebugInfo by viewModel.showDebugInfo.collectAsState()
@@ -398,10 +400,7 @@ fun DashboardScreen(
             TargetAppStatusRow(
                 status = bharatStatus,
                 isRunning = isRunning,
-                showDebugInfo = showDebugInfo,
-                onRowClick = {
-                    bharatStatus.resolvedPackage?.let { pkg -> viewModel.openApp(context, pkg) }
-                }
+                showDebugInfo = showDebugInfo
             )
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -417,10 +416,7 @@ fun DashboardScreen(
             TargetAppStatusRow(
                 status = rapidoStatus,
                 isRunning = isRunning,
-                showDebugInfo = showDebugInfo,
-                onRowClick = {
-                    rapidoStatus.resolvedPackage?.let { pkg -> viewModel.openApp(context, pkg) }
-                }
+                showDebugInfo = showDebugInfo
             )
 
             if (isRunning && isOfferNotRecognized) {
@@ -563,8 +559,18 @@ fun DashboardScreen(
                             color = colors.text,
                             fontSize = 13.sp
                         )
+                        val alertSub = if (alertOnAccept) {
+                            when {
+                                soundEnabled && vibrationEnabled -> "Sound + Vibration alert active"
+                                soundEnabled -> "Sound alert active"
+                                vibrationEnabled -> "Vibration alert active"
+                                else -> "Alert active (silent)"
+                            }
+                        } else {
+                            stringResource(R.string.play_sound_vibrate)
+                        }
                         Text(
-                            text = stringResource(R.string.play_sound_vibrate),
+                            text = alertSub,
                             color = colors.textSecondary,
                             fontSize = 11.sp
                         )
@@ -667,8 +673,7 @@ fun DashboardScreen(
 fun TargetAppStatusRow(
     status: AppRuntimeStatus,
     isRunning: Boolean,
-    showDebugInfo: Boolean,
-    onRowClick: () -> Unit
+    showDebugInfo: Boolean
 ) {
     val colors = LocalAppColors.current
     val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
@@ -699,7 +704,6 @@ fun TargetAppStatusRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = status.isInstalled && status.resolvedPackage != null, onClick = onRowClick)
             .padding(vertical = 4.dp, horizontal = 2.dp)
     ) {
         Row(

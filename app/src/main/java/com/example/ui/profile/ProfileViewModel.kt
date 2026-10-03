@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.model.UserProfile
 import com.example.data.repository.AuthRepository
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,14 +36,15 @@ class ProfileViewModel(private val authRepository: AuthRepository) : ViewModel()
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
     init {
-        // Ticking countdown timer updating every second
+        // Ticking countdown timer updating every second when profile is active
         viewModelScope.launch {
-            while (true) {
+            while (isActive) {
                 val profile = currentUser.value
                 if (profile != null) {
                     val remainingMs = profile.expiresAt - System.currentTimeMillis()
                     if (remainingMs <= 0 || profile.status.equals("Expired", ignoreCase = true)) {
                         _countdown.value = CountdownTime(0, 0, 0, 0, isExpired = true, isUnderSevenDays = true)
+                        delay(5000)
                     } else {
                         val secondsTotal = remainingMs / 1000
                         val days = secondsTotal / 86400
@@ -57,9 +59,11 @@ class ProfileViewModel(private val authRepository: AuthRepository) : ViewModel()
                             isExpired = false,
                             isUnderSevenDays = days < 7
                         )
+                        delay(1000)
                     }
+                } else {
+                    delay(3000)
                 }
-                delay(1000)
             }
         }
     }

@@ -46,6 +46,16 @@
       "More requests",
       "अधिक अनुरोध"
     ],
+    "knownRideTypes": [
+      "Economy Intercity",
+      "Premium Intercity",
+      "Cab Economy",
+      "Cab Premium",
+      "Cab XL",
+      "Cab",
+      "Auto",
+      "Bike"
+    ],
     "detectionHints": [
       "Accept",
       "₹"
@@ -78,6 +88,17 @@
       "Go To",
       "Stay In",
       "Extra from Customer"
+    ],
+    "knownRideTypes": [
+      "Cab Economy",
+      "Cab Premium",
+      "Cab XL",
+      "Bike Boost",
+      "Auto Boost",
+      "Cab Boost",
+      "Bike",
+      "Auto",
+      "Cab"
     ],
     "detectionHints": [
       "Accept",

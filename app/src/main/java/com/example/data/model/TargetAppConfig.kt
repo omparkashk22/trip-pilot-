@@ -13,5 +13,6 @@ data class TargetAppConfig(
     val distanceRegex: String = "",
     val acceptTexts: List<String> = listOf("Accept"),
     val neverClickTexts: List<String> = emptyList(),
+    val knownRideTypes: List<String> = emptyList(),
     val detectionHints: List<String> = emptyList()
 )

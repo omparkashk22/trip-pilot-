@@ -10,6 +10,8 @@ data class FilterEvaluationResult(
 
 object FilterEngine {
 
+    private val WHITESPACE_REGEX = "\\s+".toRegex()
+
     fun evaluate(
         offer: RideOffer,
         filter: DriverFilter,
@@ -22,9 +24,9 @@ object FilterEngine {
 
         // 2. Allowed Ride Types
         if (filter.allowedRideTypes.isNotEmpty()) {
-            val offerTypeClean = offer.rideType.trim().replace("\\s+".toRegex(), " ")
+            val offerTypeClean = offer.rideType.trim().replace(WHITESPACE_REGEX, " ")
             val matchesType = filter.allowedRideTypes.any { allowed ->
-                val allowedClean = allowed.trim().replace("\\s+".toRegex(), " ")
+                val allowedClean = allowed.trim().replace(WHITESPACE_REGEX, " ")
                 offerTypeClean.equals(allowedClean, ignoreCase = true) ||
                         offerTypeClean.contains(allowedClean, ignoreCase = true) ||
                         allowedClean.contains(offerTypeClean, ignoreCase = true)

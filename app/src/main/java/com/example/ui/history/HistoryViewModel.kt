@@ -70,13 +70,15 @@ class HistoryViewModel(
         var skipped = 0
         var totalFare = 0.0
 
-        logs.filter { it.timestamp >= startOfDay }.forEach { log ->
-            when (log.status.uppercase()) {
-                "ACCEPTED" -> {
-                    accepted++
-                    totalFare += log.totalFare
+        for (log in logs) {
+            if (log.timestamp >= startOfDay) {
+                when (log.status.uppercase()) {
+                    "ACCEPTED" -> {
+                        accepted++
+                        totalFare += log.totalFare
+                    }
+                    "SKIPPED" -> skipped++
                 }
-                "SKIPPED" -> skipped++
             }
         }
         TodayRideStats(accepted, skipped, totalFare)

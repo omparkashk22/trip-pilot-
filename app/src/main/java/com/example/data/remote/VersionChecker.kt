@@ -1,8 +1,8 @@
 package com.example.data.remote
 
 import android.content.Context
-import android.util.Log
 import com.example.BuildConfig
+import com.example.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -77,7 +77,7 @@ class VersionChecker(
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    Log.w(TAG, "GitHub releases request returned code: ${response.code}")
+                    AppLogger.w(TAG, "GitHub releases request returned code: ${response.code}")
                     return@withContext null
                 }
 
@@ -118,7 +118,7 @@ class VersionChecker(
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error checking for updates: ${e.message}")
+            AppLogger.e(TAG, "Error checking for updates: ${e.message}")
             null
         }
     }

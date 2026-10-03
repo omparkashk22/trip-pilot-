@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val themeSetting by app.preferencesManager.theme.collectAsState(initial = "dark")
+            val textScale by app.preferencesManager.textScale.collectAsState(initial = 1.0f)
             val systemInDark = isSystemInDarkTheme()
 
             val isDark = when (themeSetting.lowercase()) {
@@ -63,7 +64,7 @@ class MainActivity : ComponentActivity() {
                 insetsController.isAppearanceLightNavigationBars = !isDark
             }
 
-            TripPilotTheme(themeSetting = themeSetting) {
+            TripPilotTheme(themeSetting = themeSetting, textScale = textScale) {
                 TripPilotNavGraph(app = app)
             }
         }

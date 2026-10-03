@@ -4,7 +4,9 @@ import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.data.model.RideOffer
 import java.security.MessageDigest
+import java.util.Locale
 import java.util.regex.Pattern
+import kotlin.math.abs
 
 data class ParsedNode(
     val node: AccessibilityNodeInfo?,
@@ -13,8 +15,45 @@ data class ParsedNode(
     val isVisibleToUser: Boolean = true,
     val isClickable: Boolean = false,
     val viewId: String? = null,
-    val className: String? = null
+    val className: String? = null,
+    val depth: Int = 0
 )
+
+fun buildRawCardJson(
+    cardNodes: List<ParsedNode>,
+    layoutVariant: String,
+    parseConfidence: String,
+    parseReason: String?
+): String {
+    val maxNodes = cardNodes.take(80)
+    val sb = StringBuilder()
+    sb.append("{")
+    sb.append("\"layout\":\"").append(layoutVariant).append("\",")
+    sb.append("\"confidence\":\"").append(parseConfidence).append("\",")
+    sb.append("\"reason\":").append(if (parseReason != null) "\"$parseReason\"" else "null").append(",")
+    sb.append("\"nodes\":[")
+    for (i in maxNodes.indices) {
+        val n = maxNodes[i]
+        val shortId = n.viewId?.substringAfter(":id/") ?: ""
+        val shortCls = n.className?.substringAfterLast(".") ?: ""
+        val escapedText = n.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\r", "")
+        val cd = n.node?.contentDescription?.toString() ?: ""
+        val escapedCd = cd.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\r", "")
+
+        sb.append("{")
+        sb.append("\"text\":\"").append(escapedText).append("\",")
+        sb.append("\"contentDescription\":\"").append(escapedCd).append("\",")
+        sb.append("\"viewId\":\"").append(shortId).append("\",")
+        sb.append("\"className\":\"").append(shortCls).append("\",")
+        sb.append("\"boundsHeight\":").append(n.bounds.height()).append(",")
+        sb.append("\"clickable\":").append(n.isClickable).append(",")
+        sb.append("\"depth\":").append(n.depth)
+        sb.append("}")
+        if (i < maxNodes.size - 1) sb.append(",")
+    }
+    sb.append("]}")
+    return sb.toString()
+}
 
 object BharatTaxiParser {
 
@@ -24,8 +63,30 @@ object BharatTaxiParser {
         Pattern.CASE_INSENSITIVE
     )
 
-    private val FARE_PATTERN = Pattern.compile("₹\\s*([0-9][0-9,]*(\\.[0-9]+)?)")
+    // A text is a PER-KM RATE if it matches ₹?\s*([0-9]+(?:\.[0-9]+)?)\s*/\s*km (case-insensitive)
+    val PER_KM_PATTERN: Pattern = Pattern.compile(
+        "₹?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*/\\s*km",
+        Pattern.CASE_INSENSITIVE
+    )
+
+    // Fare amount regex must reject per-km text: ₹\s*([0-9][0-9,]*(?:\.[0-9]+)?)(?!\s*/\s*km)(?![0-9])
+    val FARE_AMOUNT_PATTERN: Pattern = Pattern.compile(
+        "₹\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)(?!\\s*/\\s*km)(?![0-9])",
+        Pattern.CASE_INSENSITIVE
+    )
+
     private val NUMERIC_PATTERN = Pattern.compile("([0-9][0-9,]*(\\.[0-9]+)?)")
+
+    val KNOWN_RIDE_TYPES = listOf(
+        "Economy Intercity",
+        "Premium Intercity",
+        "Cab Economy",
+        "Cab Premium",
+        "Cab XL",
+        "Cab",
+        "Auto",
+        "Bike"
+    )
 
     fun parseNodes(
         nodes: List<ParsedNode>,
@@ -34,53 +95,52 @@ object BharatTaxiParser {
     ): List<RideOffer> {
         if (nodes.isEmpty()) return emptyList()
 
-        // Check if Variant 1 view IDs exist on screen
-        val hasVariant1Ids = nodes.any { n ->
+        // Ignore floating widget window (floating_layout)
+        val nonFloatingNodes = nodes.filter { n ->
             val vid = n.viewId?.substringAfter(":id/") ?: ""
-            vid == "ride_request_content_recycler_view" ||
-                    vid == "ride_accept" ||
-                    vid == "pickupDistance" ||
-                    vid == "tripDistance"
+            vid != "floating_layout" && !n.text.contains("floating_layout", ignoreCase = true)
         }
+        if (nonFloatingNodes.isEmpty()) return emptyList()
 
-        return if (hasVariant1Ids) {
-            parseVariant1(nodes, screenBounds)
-        } else {
-            parseVariant2(nodes, processTestRequests, screenBounds)
+        // Detect if left rail is present
+        val hasLeftRail = nonFloatingNodes.any { n ->
+            val vid = n.viewId?.substringAfter(":id/") ?: ""
+            vid == "ride_request_tab_recycler_view" || (n.bounds.right in 1..190 && n.bounds.left < 190 && n.isClickable)
         }
-    }
+        val layoutVariant = if (hasLeftRail) "LIST" else "SINGLE"
 
-    // Variant 1: List mode with known view IDs
-    private fun parseVariant1(
-        nodes: List<ParsedNode>,
-        screenBounds: Rect
-    ): List<RideOffer> {
-        val offers = mutableListOf<RideOffer>()
-
-        // 1. Ignore the left rail (ride_request_tab_recycler_view, bounds x < 190)
-        val cardNodes = nodes.filter { n ->
+        // Filter out left rail nodes and never-click nodes
+        val cardNodes = nonFloatingNodes.filter { n ->
             val vid = n.viewId?.substringAfter(":id/") ?: ""
             val isRail = vid == "ride_request_tab_recycler_view" ||
-                    (n.bounds.right > 0 && n.bounds.right <= 190 && n.bounds.left < 190)
-            !isRail
+                    (hasLeftRail && n.bounds.right in 1..190 && n.bounds.left < 190)
+            val isNeverClick = vid == "ride_decline" || vid == "rr_silent_container" ||
+                    vid == "rr_minimize_container" || vid == "tts_toggle_container"
+            !isRail && !isNeverClick
         }
 
-        // Group into cards by "ride_accept" or "container"
+        // Identify cards ending with Accept
         val acceptIndices = mutableListOf<Int>()
         for (i in cardNodes.indices) {
             val vid = cardNodes[i].viewId?.substringAfter(":id/") ?: ""
             val text = cardNodes[i].text.trim()
-            if (vid == "ride_accept" || vid == "ride_accept_text" || text.equals("Accept", ignoreCase = true)) {
-                acceptIndices.add(i)
+            if (vid == "ride_accept" || vid == "ride_accept_text" ||
+                text.equals("Accept", ignoreCase = true) || text.equals("स्वीकार करें", ignoreCase = true)
+            ) {
+                // Must be an actual Accept button, not a cancellation or decline link
+                if (!text.contains("cancellation", ignoreCase = true) && !text.contains("decline", ignoreCase = true)) {
+                    acceptIndices.add(i)
+                }
             }
         }
 
         if (acceptIndices.isEmpty()) return emptyList()
 
+        val offers = mutableListOf<RideOffer>()
         var startIndex = 0
         for (acceptIdx in acceptIndices) {
             val group = cardNodes.subList(startIndex, acceptIdx + 1)
-            val offer = parseVariant1Card(group, screenBounds)
+            val offer = parseCardGroup(group, processTestRequests, screenBounds, layoutVariant)
             if (offer != null) {
                 offers.add(offer)
             }
@@ -90,12 +150,16 @@ object BharatTaxiParser {
         return offers
     }
 
-    private fun parseVariant1Card(
+    private fun parseCardGroup(
         cardNodes: List<ParsedNode>,
-        screenBounds: Rect
+        processTestRequests: Boolean,
+        screenBounds: Rect,
+        layoutVariant: String
     ): RideOffer? {
-        var rideType = "Cab Economy"
+        var isTest = false
+        var rideType = "Unknown"
         var baseFare: Double? = null
+        var chosenFareNode: ParsedNode? = null
         var appFarePerKm: Double? = null
 
         var pickupDistKm: Double? = null
@@ -107,107 +171,217 @@ object BharatTaxiParser {
         var dropAddress = ""
 
         var rideAcceptNode: ParsedNode? = null
+        var pickupDistNodeIdx = -1
+        var dropDistNodeIdx = -1
 
-        // Pass 1: Parse structured elements by viewId
-        var foundFirstCurrency = false
-        var foundSecondCurrency = false
+        // Check for TEST REQUEST
+        for (n in cardNodes) {
+            if (n.text.contains("TEST REQUEST", ignoreCase = true)) {
+                isTest = true
+            }
+        }
+        if (!processTestRequests && isTest) return null
+
+        // 1. First extract any PER-KM RATE: e.g. "₹27/km", "₹ 22 / km", "26/km"
+        for (i in cardNodes.indices) {
+            val n = cardNodes[i]
+            val text = n.text.trim()
+
+            // Check if this node matches PER-KM pattern
+            val perKmM = PER_KM_PATTERN.matcher(text)
+            if (perKmM.find()) {
+                val rate = perKmM.group(1)?.toDoubleOrNull()
+                if (rate != null && appFarePerKm == null) {
+                    appFarePerKm = rate
+                }
+            } else if (text == "₹" && i + 1 < cardNodes.size) {
+                // Separate nodes: "₹" followed by "27/km"
+                val nextText = cardNodes[i + 1].text.trim()
+                val nextM = PER_KM_PATTERN.matcher(nextText)
+                if (nextM.find()) {
+                    val rate = nextM.group(1)?.toDoubleOrNull()
+                    if (rate != null && appFarePerKm == null) {
+                        appFarePerKm = rate
+                    }
+                }
+            } else if (text.contains("/km", ignoreCase = true)) {
+                val num = parseNumber(text)
+                if (num != null && appFarePerKm == null) {
+                    appFarePerKm = num
+                }
+            }
+        }
+
+        // 2. Candidate fare nodes = ₹ amounts inside the card subtree only
+        // Choose the candidate with largest text height (node bounds height); on tie, first in tree order
+        data class FareCandidate(val node: ParsedNode, val amount: Double, val height: Int, val index: Int)
+        val candidates = mutableListOf<FareCandidate>()
 
         for (i in cardNodes.indices) {
             val n = cardNodes[i]
+            val text = n.text.trim()
+
+            // Reject per-km text and +N buttons
+            if (text.contains("/km", ignoreCase = true) || PER_KM_PATTERN.matcher(text).find() || text.startsWith("+")) {
+                continue
+            }
+
+            // Check if node matches fare amount regex
+            val fm = FARE_AMOUNT_PATTERN.matcher(text)
+            if (fm.find()) {
+                val amount = fm.group(1)?.replace(",", "")?.toDoubleOrNull()
+                if (amount != null) {
+                    candidates.add(FareCandidate(n, amount, n.bounds.height(), i))
+                }
+            } else if (text == "₹" && i + 1 < cardNodes.size) {
+                // Separate node: "₹" then "95"
+                val nextNode = cardNodes[i + 1]
+                val nextText = nextNode.text.trim()
+                if (!nextText.contains("/km", ignoreCase = true)) {
+                    val amount = parseNumber(nextText)
+                    if (amount != null) {
+                        val h = maxOf(n.bounds.height(), nextNode.bounds.height())
+                        candidates.add(FareCandidate(nextNode, amount, h, i))
+                    }
+                }
+            } else {
+                val vid = n.viewId?.substringAfter(":id/") ?: ""
+                if (vid == "tv_value" && !text.contains("/km", ignoreCase = true)) {
+                    val amount = parseNumber(text)
+                    if (amount != null) {
+                        candidates.add(FareCandidate(n, amount, n.bounds.height(), i))
+                    }
+                }
+            }
+        }
+
+        if (candidates.isNotEmpty()) {
+            // Sort by largest bounds height descending, then by tree order index ascending
+            candidates.sortWith(compareByDescending<FareCandidate> { it.height }.thenBy { it.index })
+            val best = candidates.first()
+            baseFare = best.amount
+            chosenFareNode = best.node
+        }
+
+        // 3. Parse distance/time lines with tolerant regex
+        for (i in cardNodes.indices) {
+            val n = cardNodes[i]
             val vid = n.viewId?.substringAfter(":id/") ?: ""
-            val t = n.text.trim()
+            val text = n.text.trim()
 
-            // (a) Ride type: first non-empty TextView without viewId or with ride type text
-            if ((vid.isEmpty() || vid == "container") && t.isNotEmpty() && !t.startsWith("₹") && !t.equals("Accept", ignoreCase = true)) {
-                if (rideType == "Cab Economy" && isCandidateRideType(t)) {
-                    rideType = t
-                }
-            }
-
-            // (b) Fare: tv_currency ("₹") followed by tv_value ("95")
-            if (vid == "tv_currency" || t == "₹") {
-                if (!foundFirstCurrency) {
-                    foundFirstCurrency = true
-                    // Look ahead for tv_value
-                    for (j in (i + 1) until minOf(i + 3, cardNodes.size)) {
-                        val next = cardNodes[j]
-                        val nextVid = next.viewId?.substringAfter(":id/") ?: ""
-                        val num = parseNumber(next.text)
-                        if (num != null) {
-                            baseFare = num
-                            break
-                        }
-                    }
-                } else if (!foundSecondCurrency) {
-                    foundSecondCurrency = true
-                    // Look ahead for per-km value like "27/km"
-                    for (j in (i + 1) until minOf(i + 3, cardNodes.size)) {
-                        val next = cardNodes[j]
-                        val num = parseNumber(next.text)
-                        if (num != null) {
-                            appFarePerKm = num
-                            break
-                        }
-                    }
-                }
-            } else if (baseFare == null && (vid == "tv_value" || t.startsWith("₹"))) {
-                val num = parseNumber(t)
-                if (num != null) {
-                    baseFare = num
-                }
-            }
-
-            // (e) pickupDistance: e.g. "0 m・1 min"
-            if (vid == "pickupDistance" || (pickupDistKm == null && DIST_TIME_PATTERN.matcher(t).find())) {
-                val dt = parseDistanceTime(t)
-                if (dt != null) {
+            if (vid == "pickupDistance" || (pickupDistKm == null && DIST_TIME_PATTERN.matcher(text).find())) {
+                val dt = parseDistanceTime(text)
+                if (dt != null && pickupDistKm == null) {
                     pickupDistKm = dt.first
                     pickupEtaMin = dt.second
+                    pickupDistNodeIdx = i
                 }
-            }
-
-            // (f & h) tv_primary_text: first is pickup address, second is drop address
-            if (vid == "tv_primary_text") {
-                if (pickupAddress.isEmpty()) {
-                    pickupAddress = t
-                } else if (dropAddress.isEmpty()) {
-                    dropAddress = t
-                }
-            }
-
-            // (g) tripDistance: e.g. "3.5 km・11 min"
-            if (vid == "tripDistance") {
-                val dt = parseDistanceTime(t)
-                if (dt != null) {
+            } else if (vid == "tripDistance" || (pickupDistKm != null && dropDistKm == null && DIST_TIME_PATTERN.matcher(text).find())) {
+                val dt = parseDistanceTime(text)
+                if (dt != null && dropDistKm == null) {
                     dropDistKm = dt.first
                     dropEtaMin = dt.second
+                    dropDistNodeIdx = i
                 }
             }
 
-            // (i) ride_accept node
-            if (vid == "ride_accept") {
-                rideAcceptNode = n
-            } else if (rideAcceptNode == null && (vid == "ride_accept_text" || t.equals("Accept", ignoreCase = true))) {
+            // Accept node
+            if (vid == "ride_accept" || vid == "ride_accept_text" ||
+                text.equals("Accept", ignoreCase = true) || text.equals("स्वीकार करें", ignoreCase = true)
+            ) {
                 rideAcceptNode = n
             }
         }
 
-        // Fallback for addresses if tv_primary_text wasn't tagged
-        if (pickupAddress.isEmpty() || dropAddress.isEmpty()) {
-            val textCandidates = cardNodes.map { it.text.trim() }.filter {
-                it.isNotEmpty() && !it.startsWith("₹") && !it.equals("Accept", ignoreCase = true) &&
-                        !DIST_TIME_PATTERN.matcher(it).find() && !isIgnoredBharatText(it)
-            }
-            if (pickupAddress.isEmpty() && textCandidates.isNotEmpty()) {
-                pickupAddress = textCandidates.getOrNull(1) ?: textCandidates[0]
-            }
-            if (dropAddress.isEmpty() && textCandidates.size >= 3) {
-                dropAddress = textCandidates.last()
+        // 4. Ride Type detection
+        // Order: (1) First non-empty TextView without viewId in the card
+        // (2) Known list from registry
+        for (n in cardNodes) {
+            val vid = n.viewId?.substringAfter(":id/") ?: ""
+            val text = n.text.trim()
+            if (text.isNotEmpty() && !text.startsWith("₹") && !text.contains("/km", ignoreCase = true) &&
+                !text.equals("Accept", ignoreCase = true) && !DIST_TIME_PATTERN.matcher(text).find() &&
+                !text.contains("TEST REQUEST", ignoreCase = true)
+            ) {
+                if (vid.isEmpty() || vid == "container") {
+                    val matchingKnown = KNOWN_RIDE_TYPES.firstOrNull { text.equals(it, ignoreCase = true) || text.contains(it, ignoreCase = true) }
+                    if (matchingKnown != null) {
+                        rideType = matchingKnown
+                        break
+                    }
+                }
             }
         }
+        if (rideType == "Unknown") {
+            // Check any node text for known list
+            for (known in KNOWN_RIDE_TYPES) {
+                if (cardNodes.any { it.text.contains(known, ignoreCase = true) }) {
+                    rideType = known
+                    break
+                }
+            }
+        }
+
+        // 5. Address extraction
+        // First try tv_primary_text
+        val primaryTexts = cardNodes.filter { (it.viewId?.substringAfter(":id/") ?: "") == "tv_primary_text" }
+        if (primaryTexts.size >= 2) {
+            pickupAddress = primaryTexts[0].text.trim()
+            dropAddress = primaryTexts[1].text.trim()
+        } else {
+            // Fall back to text position between distance lines
+            if (pickupDistNodeIdx != -1 && dropDistNodeIdx != -1 && pickupDistNodeIdx < dropDistNodeIdx) {
+                val pickupParts = mutableListOf<String>()
+                for (i in (pickupDistNodeIdx + 1) until dropDistNodeIdx) {
+                    val text = cardNodes[i].text.trim()
+                    if (text.isNotEmpty() && !isIgnoredBharatText(text)) {
+                        pickupParts.add(text)
+                    }
+                }
+                pickupAddress = pickupParts.joinToString(", ")
+            }
+
+            if (dropDistNodeIdx != -1) {
+                val dropParts = mutableListOf<String>()
+                for (i in (dropDistNodeIdx + 1) until (cardNodes.size - 1)) {
+                    val text = cardNodes[i].text.trim()
+                    if (text.isNotEmpty() && !isIgnoredBharatText(text)) {
+                        dropParts.add(text)
+                    }
+                }
+                dropAddress = dropParts.joinToString(", ")
+            }
+        }
+
+        if (pickupAddress.isEmpty()) pickupAddress = "Pickup Location"
+        if (dropAddress.isEmpty()) dropAddress = "Drop Location"
 
         if (baseFare == null || pickupDistKm == null || dropDistKm == null) {
             return null
+        }
+
+        // 6. Safety check & confidence calculation (Rule B)
+        var parseConfidence = "HIGH"
+        var parseReason: String? = null
+
+        val totalFare = baseFare
+        if (appFarePerKm != null && dropDistKm > 0) {
+            val calculatedFarePerKm = totalFare / dropDistKm
+            val diff = abs(calculatedFarePerKm - appFarePerKm) / appFarePerKm
+            if (diff > 0.35) {
+                parseConfidence = "LOW"
+                parseReason = "Fare/km mismatch"
+            }
+        }
+
+        if (chosenFareNode?.text?.contains("/km", ignoreCase = true) == true) {
+            parseConfidence = "LOW"
+            parseReason = "Fare node contains /km"
+        }
+
+        if (totalFare < 5.0) {
+            parseConfidence = "LOW"
+            parseReason = "Fare below ₹5"
         }
 
         val acceptNode = rideAcceptNode ?: cardNodes.last()
@@ -216,151 +390,16 @@ object BharatTaxiParser {
                 acceptBounds.right <= screenBounds.right && acceptBounds.bottom <= screenBounds.bottom
         val isActionable = acceptNode.isVisibleToUser && isInsideScreen
 
-        val rawTextHash = computeHash("bharat_taxi_v1_${baseFare}_${pickupAddress}_${dropAddress}")
+        val rawTextHash = computeHash("bharat_${rideType}_${baseFare}_${pickupAddress}_${dropAddress}")
+        val rawCard = buildRawCardJson(cardNodes, layoutVariant, parseConfidence, parseReason)
 
         return RideOffer(
             appId = "bharat_taxi",
             rideType = rideType,
             baseFare = baseFare,
             extraFare = 0.0,
-            totalFare = baseFare,
+            totalFare = totalFare,
             appFarePerKm = appFarePerKm,
-            pickupDistanceKm = pickupDistKm,
-            pickupEtaMin = pickupEtaMin,
-            dropDistanceKm = dropDistKm,
-            dropEtaMin = dropEtaMin,
-            pickupAddress = pickupAddress.ifEmpty { "Pickup Location" },
-            dropAddress = dropAddress.ifEmpty { "Drop Location" },
-            dropAddressTruncated = false,
-            isTest = false,
-            rawTextHash = rawTextHash,
-            acceptNodeBounds = acceptBounds,
-            acceptNode = acceptNode.node,
-            isActionable = isActionable
-        )
-    }
-
-    // Variant 2: Single request mode via text heuristics
-    private fun parseVariant2(
-        nodes: List<ParsedNode>,
-        processTestRequests: Boolean,
-        screenBounds: Rect
-    ): List<RideOffer> {
-        val offers = mutableListOf<RideOffer>()
-
-        val acceptIndices = mutableListOf<Int>()
-        for (i in nodes.indices) {
-            val text = nodes[i].text.trim()
-            if (text.equals("Accept", ignoreCase = true) || text.equals("स्वीकार करें", ignoreCase = true)) {
-                acceptIndices.add(i)
-            }
-        }
-
-        if (acceptIndices.isEmpty()) return emptyList()
-
-        var startIndex = 0
-        for (acceptIdx in acceptIndices) {
-            val cardNodes = nodes.subList(startIndex, acceptIdx + 1)
-            val offer = parseVariant2Card(cardNodes, processTestRequests, screenBounds)
-            if (offer != null) {
-                offers.add(offer)
-            }
-            startIndex = acceptIdx + 1
-        }
-
-        return offers
-    }
-
-    private fun parseVariant2Card(
-        cardNodes: List<ParsedNode>,
-        processTestRequests: Boolean,
-        screenBounds: Rect
-    ): RideOffer? {
-        var isTest = false
-        var fare: Double? = null
-        var pickupDistKm: Double? = null
-        var pickupEtaMin: Int? = null
-        var dropDistKm: Double? = null
-        var dropEtaMin: Int? = null
-
-        var pickupDistNodeIdx = -1
-        var dropDistNodeIdx = -1
-
-        for (i in cardNodes.indices) {
-            val t = cardNodes[i].text.trim()
-            if (t.contains("TEST REQUEST", ignoreCase = true)) {
-                isTest = true
-            }
-
-            // Fare check: either "₹50" or "₹" followed by "50"
-            if (fare == null) {
-                if (t.startsWith("₹")) {
-                    val m = FARE_PATTERN.matcher(t)
-                    if (m.find()) {
-                        fare = m.group(1)?.replace(",", "")?.toDoubleOrNull()
-                    } else if (i + 1 < cardNodes.size) {
-                        fare = parseNumber(cardNodes[i + 1].text)
-                    }
-                }
-            }
-
-            // Dist/time match with tolerant regex
-            val dt = parseDistanceTime(t)
-            if (dt != null) {
-                if (pickupDistKm == null) {
-                    pickupDistKm = dt.first
-                    pickupEtaMin = dt.second
-                    pickupDistNodeIdx = i
-                } else if (dropDistKm == null) {
-                    dropDistKm = dt.first
-                    dropEtaMin = dt.second
-                    dropDistNodeIdx = i
-                }
-            }
-        }
-
-        if (!processTestRequests && isTest) {
-            return null
-        }
-
-        if (fare == null || pickupDistKm == null || dropDistKm == null || pickupDistNodeIdx == -1 || dropDistNodeIdx == -1) {
-            return null
-        }
-
-        // Pickup address is text between pickup distance and drop distance
-        val pickupAddrParts = mutableListOf<String>()
-        for (i in (pickupDistNodeIdx + 1) until dropDistNodeIdx) {
-            val text = cardNodes[i].text.trim()
-            if (text.isNotEmpty() && !isIgnoredBharatText(text)) {
-                pickupAddrParts.add(text)
-            }
-        }
-        val pickupAddress = pickupAddrParts.joinToString(", ").ifEmpty { "Pickup Location" }
-
-        // Drop address is text after drop distance and before buttons
-        val dropAddrParts = mutableListOf<String>()
-        for (i in (dropDistNodeIdx + 1) until (cardNodes.size - 1)) {
-            val text = cardNodes[i].text.trim()
-            if (text.isNotEmpty() && !isIgnoredBharatText(text)) {
-                dropAddrParts.add(text)
-            }
-        }
-        val dropAddress = dropAddrParts.joinToString(", ").ifEmpty { "Drop Location" }
-
-        val acceptNode = cardNodes.last()
-        val acceptBounds = acceptNode.bounds
-        val isInsideScreen = acceptBounds.left >= 0 && acceptBounds.top >= 0 &&
-                acceptBounds.right <= screenBounds.right && acceptBounds.bottom <= screenBounds.bottom
-        val isActionable = acceptNode.isVisibleToUser && isInsideScreen
-
-        val rawTextHash = computeHash("bharat_taxi_v2_${fare}_${pickupAddress}_${dropAddress}")
-
-        return RideOffer(
-            appId = "bharat_taxi",
-            rideType = "Bharat Taxi",
-            baseFare = fare,
-            extraFare = 0.0,
-            totalFare = fare,
             pickupDistanceKm = pickupDistKm,
             pickupEtaMin = pickupEtaMin,
             dropDistanceKm = dropDistKm,
@@ -372,7 +411,11 @@ object BharatTaxiParser {
             rawTextHash = rawTextHash,
             acceptNodeBounds = acceptBounds,
             acceptNode = acceptNode.node,
-            isActionable = isActionable
+            isActionable = isActionable,
+            parseConfidence = parseConfidence,
+            parseReason = parseReason,
+            layoutVariant = layoutVariant,
+            rawCard = rawCard
         )
     }
 
@@ -380,7 +423,7 @@ object BharatTaxiParser {
         val m = DIST_TIME_PATTERN.matcher(text)
         if (m.find()) {
             val value = m.group(1)?.toDoubleOrNull() ?: 0.0
-            val unit = m.group(2)?.lowercase() ?: "km"
+            val unit = m.group(2)?.lowercase(Locale.ROOT) ?: "km"
             val distKm = if (unit == "m") value / 1000.0 else value
             val mins = m.group(3)?.toIntOrNull()
             return Pair(distKm, mins)
@@ -393,17 +436,11 @@ object BharatTaxiParser {
         return if (m.find()) m.group(1)?.replace(",", "")?.toDoubleOrNull() else null
     }
 
-    private fun isCandidateRideType(text: String): Boolean {
-        val lower = text.lowercase()
-        return lower.contains("cab") || lower.contains("economy") ||
-                lower.contains("premium") || lower.contains("intercity") ||
-                lower.contains("sedan") || lower.contains("mini")
-    }
-
     private fun isIgnoredBharatText(text: String): Boolean {
-        val lower = text.lowercase()
+        val lower = text.lowercase(Locale.ROOT)
         return lower.startsWith("+") || lower == "x" || lower == "more requests" ||
-                lower.startsWith("₹") || lower == "ride_decline" || lower == "decline"
+                lower.startsWith("₹") || lower == "ride_decline" || lower == "decline" ||
+                DIST_TIME_PATTERN.matcher(text).find() || PER_KM_PATTERN.matcher(text).find()
     }
 
     private fun computeHash(input: String): String {

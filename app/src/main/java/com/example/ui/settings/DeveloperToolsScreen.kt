@@ -297,7 +297,7 @@ fun DeveloperToolsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Recent Screen Tree Dumps (${existingDumps.size}/5)",
+                        text = "Recent Screen Tree Dumps (${existingDumps.size}/10)",
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary,
                         fontSize = 14.sp
@@ -323,7 +323,10 @@ fun DeveloperToolsScreen(
                     )
                 } else {
                     Spacer(modifier = Modifier.height(8.dp))
+                    val dumpTimeFormat = SimpleDateFormat("h:mm a, d MMM", Locale.getDefault())
                     existingDumps.forEach { file ->
+                        val timeStr = dumpTimeFormat.format(Date(file.lastModified()))
+                        val offerFound = if (file.name.contains("offer_yes")) "yes" else if (file.name.contains("offer_no")) "no" else "yes"
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -336,7 +339,7 @@ fun DeveloperToolsScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(text = file.name, color = TextPrimary, fontSize = 12.sp, maxLines = 1)
-                                    Text(text = "${file.length() / 1024} KB", color = TextSecondary, fontSize = 10.sp)
+                                    Text(text = "${file.length() / 1024} KB • $timeStr • offer found: $offerFound", color = TextSecondary, fontSize = 10.sp)
                                 }
                             }
                             IconButton(onClick = { viewModel.shareDumpFile(context, file) }) {

@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
-import android.util.Log
 import com.example.data.model.TargetAppConfig
+import com.example.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -76,6 +76,12 @@ class AppResolver(private val context: Context) {
                     for (h in 0 until hArr.length()) hints.add(hArr.getString(h))
                 }
 
+                val rideTypes = mutableListOf<String>()
+                val rtArr = obj.optJSONArray("knownRideTypes")
+                if (rtArr != null) {
+                    for (r in 0 until rtArr.length()) rideTypes.add(rtArr.getString(r))
+                }
+
                 list.add(
                     TargetAppConfig(
                         appId = obj.getString("appId"),
@@ -90,12 +96,13 @@ class AppResolver(private val context: Context) {
                         distanceRegex = obj.optString("distanceRegex", ""),
                         acceptTexts = if (accepts.isNotEmpty()) accepts else listOf("Accept"),
                         neverClickTexts = neverClicks,
+                        knownRideTypes = rideTypes,
                         detectionHints = hints
                     )
                 )
             }
         } catch (e: Exception) {
-            Log.e("AppResolver", "Error loading target_apps.json", e)
+            AppLogger.e("AppResolver", "Error loading target_apps.json", e)
         }
         list
     }

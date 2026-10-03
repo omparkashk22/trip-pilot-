@@ -108,6 +108,7 @@ val TripPilotShapes = Shapes(
 @Composable
 fun TripPilotTheme(
     themeSetting: String = "dark", // "dark", "light", "system"
+    textScale: Float = 1.0f,
     content: @Composable () -> Unit
 ) {
     val isDark = when (themeSetting.lowercase()) {
@@ -119,7 +120,16 @@ fun TripPilotTheme(
     val colorScheme = if (isDark) TripPilotDarkColorScheme else TripPilotLightColorScheme
     val appColors = if (isDark) DarkAppColors else LightAppColors
 
-    CompositionLocalProvider(LocalAppColors provides appColors) {
+    val currentDensity = androidx.compose.ui.platform.LocalDensity.current
+    val customDensity = androidx.compose.ui.unit.Density(
+        density = currentDensity.density,
+        fontScale = currentDensity.fontScale * textScale
+    )
+
+    CompositionLocalProvider(
+        LocalAppColors provides appColors,
+        androidx.compose.ui.platform.LocalDensity provides customDensity
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

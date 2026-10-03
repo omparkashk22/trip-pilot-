@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.RadioButtonChecked
@@ -34,6 +35,9 @@ import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -81,10 +85,13 @@ fun SettingsScreen(
 
     val currentLang by viewModel.currentLanguage.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
+    val textScale by viewModel.textScale.collectAsState()
     val keepScreenOn by viewModel.keepScreenOn.collectAsState()
     val processTestRequests by viewModel.processTestRequests.collectAsState()
     val tapMethod by viewModel.tapMethod.collectAsState()
     val showDebugInfo by viewModel.showDebugInfo.collectAsState()
+    val soundEnabled by viewModel.soundEnabled.collectAsState()
+    val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
 
     val isCheckingForUpdate by viewModel.isCheckingForUpdate.collectAsState()
     val updateCheckResult by viewModel.updateCheckResult.collectAsState()
@@ -93,6 +100,8 @@ fun SettingsScreen(
     var showLangDialog by remember { mutableStateOf(false) }
     var showTapMethodDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showTextScaleDialog by remember { mutableStateOf(false) }
+    var showSoundVibDialog by remember { mutableStateOf(false) }
     var showResetConfirmation by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
@@ -230,6 +239,36 @@ fun SettingsScreen(
                     else -> "Auto"
                 },
                 onClick = { showTapMethodDialog = true }
+            )
+
+            // Sound & Vibration Row
+            val soundVibSummary = when {
+                soundEnabled && vibrationEnabled -> "Sound + Vibrate"
+                soundEnabled -> "Sound only"
+                vibrationEnabled -> "Vibrate only"
+                else -> "Silent"
+            }
+            SettingsClickableRow(
+                icon = Icons.Default.VolumeUp,
+                tint = Icon3DTint.ROSE,
+                title = stringResource(R.string.sound_vibration),
+                value = soundVibSummary,
+                onClick = { showSoundVibDialog = true }
+            )
+
+            // Text Size Row
+            val textScaleLabel = when ((textScale * 100).toInt()) {
+                115 -> "115% (Medium)"
+                130 -> "130% (Large)"
+                140 -> "140% (Extra Large)"
+                else -> "100% (Default)"
+            }
+            SettingsClickableRow(
+                icon = Icons.Default.FormatSize,
+                tint = Icon3DTint.CYAN,
+                title = "Text Size",
+                value = textScaleLabel,
+                onClick = { showTextScaleDialog = true }
             )
         }
 
@@ -572,6 +611,167 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showTapMethodDialog = false }) { Text("Close", color = colors.accent, fontSize = 12.sp) }
+            },
+            containerColor = colors.surface
+        )
+    }
+
+    // Text Size Dialog
+    if (showTextScaleDialog) {
+        val scaleOptions = listOf(
+            1.0f to "100% (Default)",
+            1.15f to "115% (Medium)",
+            1.30f to "130% (Large)",
+            1.40f to "140% (Extra Large)"
+        )
+        AlertDialog(
+            onDismissRequest = { showTextScaleDialog = false },
+            title = {
+                Text("Text Size", color = colors.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Adjust text scale for comfortable viewing on vehicle mounts. Layouts dynamically adapt up to 140% without clipping.",
+                        color = colors.textSecondary,
+                        fontSize = 11.5.sp,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    scaleOptions.forEach { (scale, label) ->
+                        val isSelected = kotlin.math.abs(textScale - scale) < 0.01f
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.setTextScale(scale)
+                                    showTextScaleDialog = false
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) colors.accent else colors.text,
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                            Icon(
+                                imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                                contentDescription = null,
+                                tint = if (isSelected) colors.accent else colors.textSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showTextScaleDialog = false }) {
+                    Text("Close", color = colors.textSecondary, fontSize = 12.sp)
+                }
+            },
+            containerColor = colors.surface
+        )
+    }
+
+    // Sound & Vibration Dialog
+    if (showSoundVibDialog) {
+        val overlayNotificationManager = remember { com.example.service.OverlayNotificationManager(context) }
+        AlertDialog(
+            onDismissRequest = { showSoundVibDialog = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.sound_vibration),
+                    color = colors.text,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Customize alert feedback when incoming ride offers match or are auto-accepted.",
+                        color = colors.textSecondary,
+                        fontSize = 12.sp
+                    )
+
+                    // Sound Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.VolumeUp, contentDescription = null, tint = colors.accent, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Play Sound", color = colors.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text("Notification audio chime", color = colors.textSecondary, fontSize = 11.sp)
+                            }
+                        }
+                        Switch(
+                            checked = soundEnabled,
+                            onCheckedChange = { viewModel.setSoundEnabled(it) },
+                            modifier = Modifier.scale(0.82f),
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = colors.background,
+                                checkedTrackColor = colors.accent,
+                                uncheckedThumbColor = colors.textSecondary,
+                                uncheckedTrackColor = colors.surface2
+                            )
+                        )
+                    }
+
+                    // Vibration Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Vibration, contentDescription = null, tint = colors.accent, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Vibrate", color = colors.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text("Double-pulse haptic pattern", color = colors.textSecondary, fontSize = 11.sp)
+                            }
+                        }
+                        Switch(
+                            checked = vibrationEnabled,
+                            onCheckedChange = { viewModel.setVibrationEnabled(it) },
+                            modifier = Modifier.scale(0.82f),
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = colors.background,
+                                checkedTrackColor = colors.accent,
+                                uncheckedThumbColor = colors.textSecondary,
+                                uncheckedTrackColor = colors.surface2
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Test Alert Button
+                    OutlinedButton(
+                        onClick = {
+                            overlayNotificationManager.playAlertFeedback(sound = soundEnabled, vibrate = vibrationEnabled)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, colors.accent)
+                    ) {
+                        Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = colors.accent, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Test Alert Feedback", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSoundVibDialog = false }) {
+                    Text("Done", color = colors.accent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
             },
             containerColor = colors.surface
         )

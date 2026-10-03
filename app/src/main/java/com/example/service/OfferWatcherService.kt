@@ -4,9 +4,9 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.pm.PackageManager
 import android.os.SystemClock
-import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.example.TripPilotApp
+import com.example.util.AppLogger
 import com.example.data.model.AppRuntimeState
 import com.example.data.model.AppRuntimeStatus
 import com.example.data.model.DriverFilter
@@ -37,6 +37,7 @@ class OfferWatcherService : AccessibilityService() {
     private var lastEventTime = 0L
     private val tappedFingerprints = ConcurrentHashMap<String, Long>()
     private var lastAutoDumpTimeMs = 0L
+    private var lastLowConfidenceDumpTimeMs = 0L
 
     // Live configuration cache from DataStore/AppResolver
     private var resolvedBharatPackage: String? = null
@@ -53,6 +54,18 @@ class OfferWatcherService : AccessibilityService() {
     private val eventTimestampsMap = ConcurrentHashMap<String, MutableList<Long>>()
     private val lastOfferParsedAtMap = ConcurrentHashMap<String, Long>()
     private val lastDecisionMap = ConcurrentHashMap<String, String>()
+    private val lastPackageEventTimeMap = ConcurrentHashMap<String, Long>()
+
+    // In-memory cached preferences (instant zero-disk access on hot path)
+    private var cachedProcessTest = true
+    private var cachedDriverFilter = DriverFilter()
+    private var cachedServiceMode = "auto_accept"
+    private var cachedTapMethod = "auto"
+    private var cachedStrategyStats = com.example.data.model.StrategyStats()
+    private var cachedAlertOnAccept = true
+    private var cachedSoundEnabled = true
+    private var cachedVibrationEnabled = true
+    private var cachedCaptureOnNext = false
 
     companion object {
         var instance: OfferWatcherService? = null
@@ -128,6 +141,17 @@ class OfferWatcherService : AccessibilityService() {
                     publishRuntimeStatuses()
                 }
             }
+
+            // Cache all preference values in memory for instant zero-disk hot-path access
+            launch { app.preferencesManager.processTestRequests.collect { cachedProcessTest = it } }
+            launch { app.preferencesManager.driverFilter.collect { cachedDriverFilter = it } }
+            launch { app.preferencesManager.serviceMode.collect { cachedServiceMode = it } }
+            launch { app.preferencesManager.tapMethod.collect { cachedTapMethod = it } }
+            launch { app.preferencesManager.strategyStats.collect { cachedStrategyStats = it } }
+            launch { app.preferencesManager.alertOnAccept.collect { cachedAlertOnAccept = it } }
+            launch { app.preferencesManager.isSoundEnabled.collect { cachedSoundEnabled = it } }
+            launch { app.preferencesManager.isVibrationEnabled.collect { cachedVibrationEnabled = it } }
+            launch { app.preferencesManager.captureOnNextOffer.collect { cachedCaptureOnNext = it } }
 
             // Periodic 1-second ticker to decay eventsLast60s and keep UI live
             launch {
@@ -207,11 +231,12 @@ class OfferWatcherService : AccessibilityService() {
         publishRuntimeStatuses()
 
         val currentTime = SystemClock.uptimeMillis()
-        if (currentTime - lastEventTime < 50) {
-            // Debounce to at most one parse per 50 ms
+        val lastPkgTime = lastPackageEventTimeMap[targetAppId] ?: 0L
+        if (currentTime - lastPkgTime < 50) {
+            // Debounce to at most one parse per 50 ms per package
             return
         }
-        lastEventTime = currentTime
+        lastPackageEventTimeMap[targetAppId] = currentTime
 
         processJob?.cancel()
         processJob = serviceScope.launch {
@@ -222,13 +247,15 @@ class OfferWatcherService : AccessibilityService() {
     private suspend fun processScreen(appId: String, packageName: String) {
         if (!TripPilotApp.engineState.value) return
 
-        val app = TripPilotApp.instance
-        val processTest = app.preferencesManager.processTestRequests.first()
-        val filter = app.preferencesManager.driverFilter.first()
-        val mode = app.preferencesManager.serviceMode.first()
-        val forcedTapMethod = app.preferencesManager.tapMethod.first()
-        val strategyStats = app.preferencesManager.strategyStats.first()
-        val alertOnAccept = app.preferencesManager.alertOnAccept.first()
+        // Read directly from instant zero-disk in-memory cache on hot path
+        val processTest = cachedProcessTest
+        val filter = cachedDriverFilter
+        val mode = cachedServiceMode
+        val forcedTapMethod = cachedTapMethod
+        val strategyStats = cachedStrategyStats
+        val alertOnAccept = cachedAlertOnAccept
+        val soundEnabled = cachedSoundEnabled
+        val vibrationEnabled = cachedVibrationEnabled
 
         val displayMetrics = resources.displayMetrics
         val offers = OfferParser.parseWindows(
@@ -259,9 +286,9 @@ class OfferWatcherService : AccessibilityService() {
                     lastAutoDumpTimeMs = now
                     try {
                         ScreenTreeDumper.dumpScreenTree(this@OfferWatcherService, windows, rootInActiveWindow, packageName)
-                        Log.i("OfferWatcherService", "Auto-saved unrecognized screen tree dump for $packageName")
+                        AppLogger.i("OfferWatcherService", "Auto-saved unrecognized screen tree dump for $packageName")
                     } catch (e: Exception) {
-                        Log.e("OfferWatcherService", "Failed to auto-save dump", e)
+                        AppLogger.e("OfferWatcherService", "Failed to auto-save dump", e)
                     }
                 }
             } else {
@@ -282,9 +309,13 @@ class OfferWatcherService : AccessibilityService() {
         publishRuntimeStatuses()
 
         // Check if Developer Tools requested "Capture on next offer"
-        val captureOnNext = app.preferencesManager.captureOnNextOffer.first()
+        val captureOnNext = cachedCaptureOnNext
         if (captureOnNext) {
-            app.preferencesManager.setCaptureOnNextOffer(false)
+            cachedCaptureOnNext = false
+            serviceScope.launch(Dispatchers.IO) {
+                app.preferencesManager.setCaptureOnNextOffer(false)
+            }
+            delay(150)
             ScreenTreeDumper.dumpScreenTree(this@OfferWatcherService, windows, rootInActiveWindow, packageName)
         }
 
@@ -292,9 +323,47 @@ class OfferWatcherService : AccessibilityService() {
         val now = System.currentTimeMillis()
         tappedFingerprints.entries.removeIf { now - it.value > 15_000 }
 
+        // Safety Check (Rule B): Check for LOW confidence offers
+        var effectiveOffers = offers
+        val hasLowConfidence = effectiveOffers.any { it.parseConfidence == "LOW" }
+        if (hasLowConfidence) {
+            // Wait up to 1 s and re-parse once (UI may still be updating)
+            delay(500)
+            val reOffers = OfferParser.parseWindows(
+                windows = windows,
+                rootNode = rootInActiveWindow,
+                appId = appId,
+                processTestRequests = processTest,
+                screenWidth = displayMetrics.widthPixels,
+                screenHeight = displayMetrics.heightPixels
+            )
+            if (reOffers.isNotEmpty()) {
+                effectiveOffers = reOffers
+            }
+
+            // Auto-save a Screen Inspector dump whenever parseConfidence = LOW, at most once per 10 minutes, keeping the last 5
+            if (effectiveOffers.any { it.parseConfidence == "LOW" }) {
+                val nowMs = System.currentTimeMillis()
+                if (nowMs - lastLowConfidenceDumpTimeMs > 10 * 60 * 1000L) {
+                    lastLowConfidenceDumpTimeMs = nowMs
+                    try {
+                        ScreenTreeDumper.dumpScreenTree(this@OfferWatcherService, windows, rootInActiveWindow, packageName, maxDumps = 5)
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+
         // Evaluate all offers
         val actionableCandidates = mutableListOf<RideOffer>()
-        for (offer in offers) {
+        for (offer in effectiveOffers) {
+            if (offer.parseConfidence == "LOW") {
+                // Rule B: LOW: do NOT tap. If still LOW, log SKIPPED with skipReason "Parse uncertain (<reason>)". Never accept or reject by filter on a LOW parse.
+                val reason = offer.parseReason ?: "Confidence LOW"
+                saveRideLogAsync(offer, status = "SKIPPED", skipReason = "Parse uncertain ($reason)")
+                lastDecisionMap[appId] = "Skipped"
+                continue
+            }
+
             val eval = FilterEngine.evaluate(offer, filter, isAppEnabled = true)
             if (eval.isMatched && offer.isActionable) {
                 // Check 15-second deduplication
@@ -329,7 +398,7 @@ class OfferWatcherService : AccessibilityService() {
 
         if (mode == "notify_only") {
             notificationManager.showOfferMatchedNotification(chosenOffer)
-            if (alertOnAccept) notificationManager.playAlertFeedback()
+            if (alertOnAccept) notificationManager.playAlertFeedback(sound = soundEnabled, vibrate = vibrationEnabled)
             saveRideLogAsync(chosenOffer, status = "ACCEPTED", skipReason = null, tapMethod = "NOTIFY_ONLY", tapLatencyMs = 0)
             lastDecisionMap[appId] = "Accepted"
             publishRuntimeStatuses()
@@ -345,10 +414,12 @@ class OfferWatcherService : AccessibilityService() {
             strategyStats = strategyStats
         )
 
-        app.preferencesManager.recordStrategyAttempt(tapResult.methodUsed.key, tapResult.success)
+        serviceScope.launch(Dispatchers.IO) {
+            app.preferencesManager.recordStrategyAttempt(tapResult.methodUsed.key, tapResult.success)
+        }
 
         if (tapResult.success) {
-            if (alertOnAccept) notificationManager.playAlertFeedback()
+            if (alertOnAccept) notificationManager.playAlertFeedback(sound = soundEnabled, vibrate = vibrationEnabled)
             saveRideLogAsync(chosenOffer, status = "ACCEPTED", skipReason = null, tapMethod = tapResult.methodUsed.name, tapLatencyMs = tapResult.latencyMs)
             lastDecisionMap[appId] = "Accepted"
         } else {
@@ -445,10 +516,18 @@ class OfferWatcherService : AccessibilityService() {
                 dropEtaMin = offer.dropEtaMin,
                 pickupAddress = offer.pickupAddress,
                 dropAddress = offer.dropAddress,
+                dropAddressTruncated = offer.dropAddressTruncated,
                 status = status,
                 skipReason = skipReason,
                 tapMethod = tapMethod,
-                tapLatencyMs = tapLatencyMs
+                tapLatencyMs = tapLatencyMs,
+                isTest = offer.isTest,
+                rawTextHash = offer.rawTextHash,
+                parseConfidence = offer.parseConfidence,
+                parseReason = offer.parseReason,
+                layoutVariant = offer.layoutVariant,
+                rawCard = offer.rawCard,
+                fingerprint = offer.fingerprint
             )
             TripPilotApp.instance.rideLogRepository.insertRideLog(log)
         }

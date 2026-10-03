@@ -1,9 +1,16 @@
 package com.example.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "ride_logs")
+@Entity(
+    tableName = "ride_logs",
+    indices = [
+        Index("fingerprint"),
+        Index("timestamp")
+    ]
+)
 data class RideLog(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -26,5 +33,11 @@ data class RideLog(
     val tapMethod: String? = null, // "NODE_CLICK", "PARENT_CLICK", "GESTURE_TAP"
     val tapLatencyMs: Long = 0,
     val isTest: Boolean = false,
-    val rawTextHash: String = ""
+    val rawTextHash: String = "",
+    val parseConfidence: String = "HIGH", // "HIGH", "MEDIUM", "LOW"
+    val parseReason: String? = null,
+    val layoutVariant: String = "LIST", // "LIST", "SINGLE", "RAPIDO"
+    val seenCount: Int = 1,
+    val rawCard: String? = null,
+    val fingerprint: String = ""
 )

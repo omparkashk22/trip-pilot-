@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -190,12 +191,12 @@ fun RideHistoryScreen(viewModel: HistoryViewModel) {
                     border = BorderStroke(1.dp, colors.hairline),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
+                        .heightIn(min = 52.dp)
                 ) {
                     Row(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 14.dp),
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -360,6 +361,7 @@ fun CompactRideLogCard(
     showDebugInfo: Boolean,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
     val colors = LocalAppColors.current
     var isExpanded by remember { mutableStateOf(false) }
 
@@ -431,9 +433,9 @@ fun CompactRideLogCard(
                     color = statusColor.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(4.dp),
                     border = BorderStroke(1.dp, statusColor.copy(alpha = 0.3f)),
-                    modifier = Modifier.height(18.dp)
+                    modifier = Modifier.heightIn(min = 18.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 5.dp)) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)) {
                         Text(
                             text = log.status,
                             color = statusColor,
@@ -443,11 +445,36 @@ fun CompactRideLogCard(
                     }
                 }
 
+                // Amber "?" pill for LOW/MEDIUM confidence
+                if (log.parseConfidence.equals("LOW", ignoreCase = true) || log.parseConfidence.equals("MEDIUM", ignoreCase = true)) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Surface(
+                        color = colors.warning.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(1.dp, colors.warning.copy(alpha = 0.5f)),
+                        modifier = Modifier.heightIn(min = 18.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                            Text(
+                                text = "?",
+                                color = colors.warning,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Fare on the right (14sp SemiBold)
+                // Fare on the right (14sp SemiBold): "₹90 + ₹26 = ₹116" or "₹95"
+                val fareDisplay = if (log.extraFare > 0.0) {
+                    "₹${log.baseFare.toInt()} + ₹${log.extraFare.toInt()} = ₹${log.totalFare.toInt()}"
+                } else {
+                    "₹${log.totalFare.toInt()}"
+                }
                 Text(
-                    text = "₹${log.totalFare.toInt()}",
+                    text = fareDisplay,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.text,
                     fontSize = 14.sp
@@ -512,13 +539,20 @@ fun CompactRideLogCard(
                 // Ride Type & Breakdown
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Ride Type: ${log.rideType}", color = colors.accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    if (log.extraFare > 0) {
-                        Text("Base ₹${log.baseFare.toInt()} + Extra ₹${log.extraFare.toInt()}", color = colors.textSecondary, fontSize = 11.sp)
-                    } else {
-                        Text("Fare: ₹${log.baseFare.toInt()}", color = colors.textSecondary, fontSize = 11.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (log.seenCount > 1) {
+                            Text("seen ${log.seenCount}×", color = colors.warning, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        if (log.extraFare > 0) {
+                            Text("Base ₹${log.baseFare.toInt()} + Extra ₹${log.extraFare.toInt()}", color = colors.textSecondary, fontSize = 11.sp)
+                        } else {
+                            Text("Fare: ₹${log.baseFare.toInt()}", color = colors.textSecondary, fontSize = 11.sp)
+                        }
                     }
                 }
 
@@ -548,10 +582,31 @@ fun CompactRideLogCard(
                 if (showDebugInfo) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Method: ${log.tapMethod ?: "None"} | Latency: ${log.tapLatencyMs}ms",
+                        text = "Method: ${log.tapMethod ?: "None"} | Latency: ${log.tapLatencyMs}ms | Layout: ${log.layoutVariant} | Conf: ${log.parseConfidence}",
                         color = colors.textSecondary,
                         fontSize = 10.sp
                     )
+
+                    // Copy raw card button
+                    if (!log.rawCard.isNullOrEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(1.dp, colors.accent),
+                            color = colors.accent.copy(alpha = 0.1f),
+                            modifier = Modifier
+                                .height(28.dp)
+                                .clickable {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Raw Card", log.rawCard))
+                                    android.widget.Toast.makeText(context, "Raw card copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+                                Text("Copy raw card", color = colors.accent, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
                 }
 
                 // Delete button

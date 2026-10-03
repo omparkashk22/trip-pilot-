@@ -233,7 +233,7 @@ fun AppsScreen(viewModel: AppsViewModel) {
                         .fillMaxWidth()
                         .heightIn(max = 300.dp)
                 ) {
-                    items(allApps) { app ->
+                    items(allApps, key = { it.packageName }) { app ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()

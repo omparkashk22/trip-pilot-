@@ -22,10 +22,20 @@ data class RideOffer(
     val acceptNodeBounds: Rect? = null,
     val acceptNode: AccessibilityNodeInfo? = null,
     val isActionable: Boolean = true,
-    val candidateIndex: Int = 0
+    val candidateIndex: Int = 0,
+    val parseConfidence: String = "HIGH", // "HIGH", "MEDIUM", "LOW"
+    val parseReason: String? = null,
+    val layoutVariant: String = "LIST", // "LIST", "SINGLE", "RAPIDO"
+    val rawCard: String? = null
 ) {
     val fingerprint: String
-        get() = "${rideType}_${baseFare}_${extraFare}_${pickupAddress.take(20)}_${dropAddress.take(20)}_${pickupDistanceKm}"
+        get() {
+            val normPickup = pickupAddress.lowercase().replace("[^a-z0-9]".toRegex(), "")
+            val normDrop = dropAddress.lowercase().replace("[^a-z0-9]".toRegex(), "")
+            val pDist = "%.1f".format(java.util.Locale.US, pickupDistanceKm)
+            val dDist = "%.1f".format(java.util.Locale.US, dropDistanceKm)
+            return "${appId}_${normPickup}_${normDrop}_${pDist}_${dDist}"
+        }
 
     fun farePerKm(fareBasis: String = "base_extra"): Double {
         val fare = if (fareBasis == "base_only") baseFare else totalFare

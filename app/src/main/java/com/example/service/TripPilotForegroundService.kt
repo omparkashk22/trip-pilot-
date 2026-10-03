@@ -8,6 +8,8 @@ import androidx.core.content.ContextCompat
 import com.example.TripPilotApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class TripPilotForegroundService : Service() {
@@ -32,14 +34,15 @@ class TripPilotForegroundService : Service() {
                 context.startService(intent)
             } catch (_: Exception) {
                 // If service is not running or restricted
-                CoroutineScope(Dispatchers.IO).launch {
+                TripPilotApp.engineState.value = false
+                TripPilotApp.instance.appScope.launch(Dispatchers.IO) {
                     TripPilotApp.instance.preferencesManager.setEngineEnabled(false)
                 }
-                TripPilotApp.engineState.value = false
             }
         }
     }
 
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var overlayNotificationManager: OverlayNotificationManager
 
     override fun onCreate() {
@@ -50,7 +53,7 @@ class TripPilotForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             TripPilotApp.engineState.value = false
-            CoroutineScope(Dispatchers.IO).launch {
+            serviceScope.launch {
                 TripPilotApp.instance.preferencesManager.setEngineEnabled(false)
             }
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -61,7 +64,7 @@ class TripPilotForegroundService : Service() {
         val notification = overlayNotificationManager.createForegroundNotification()
         startForeground(NOTIFICATION_ID, notification)
         TripPilotApp.engineState.value = true
-        CoroutineScope(Dispatchers.IO).launch {
+        serviceScope.launch {
             TripPilotApp.instance.preferencesManager.setEngineEnabled(true)
         }
 
@@ -70,6 +73,7 @@ class TripPilotForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        serviceScope.cancel()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

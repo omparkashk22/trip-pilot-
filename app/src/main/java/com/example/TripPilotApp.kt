@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
-import android.util.Log
 import com.example.data.local.AppDatabase
 import com.example.data.local.AppResolver
 import com.example.data.local.PreferencesManager
@@ -15,6 +14,7 @@ import com.example.data.remote.FirebaseManager
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.FilterRepository
 import com.example.data.repository.RideLogRepository
+import com.example.util.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -101,7 +101,7 @@ class TripPilotApp : Application() {
                         updateInfoLive.value = info
                     }
                 } catch (e: Exception) {
-                    Log.w("TripPilotApp", "Version check failed: ${e.message}")
+                    AppLogger.w("TripPilotApp", "Version check failed: ${e.message}")
                 }
                 kotlinx.coroutines.delay(6 * 3600 * 1000L)
             }
@@ -136,7 +136,7 @@ class TripPilotApp : Application() {
                     preferencesManager.resolvedRapidoPackage.first()
                 }
                 val resolved = appResolver.resolvePackageForTarget(config, savedPkg)
-                Log.i("TripPilotApp", "Startup resolved package for ${config.appId}: $resolved")
+                AppLogger.i("TripPilotApp", "Startup resolved package for ${config.appId}: $resolved")
 
                 if (config.appId == "bharat_taxi") {
                     resolvedBharatPackageLive.value = resolved

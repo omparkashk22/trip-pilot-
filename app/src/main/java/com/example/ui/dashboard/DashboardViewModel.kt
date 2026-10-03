@@ -64,6 +64,12 @@ class DashboardViewModel(
     val alertOnAccept: StateFlow<Boolean> = preferencesManager.alertOnAccept
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val soundEnabled: StateFlow<Boolean> = preferencesManager.isSoundEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val vibrationEnabled: StateFlow<Boolean> = preferencesManager.isVibrationEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     val driverFilter: StateFlow<DriverFilter> = filterRepository.filter
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DriverFilter())
 
@@ -154,17 +160,6 @@ class DashboardViewModel(
             delay(2000)
             _isFilterSavedRecently.value = false
         }
-    }
-
-    fun openApp(context: Context, packageName: String) {
-        try {
-            val intent = context.packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            if (intent != null) {
-                context.startActivity(intent)
-            }
-        } catch (_: Exception) {}
     }
 
     fun dismissUpdateBanner() {
