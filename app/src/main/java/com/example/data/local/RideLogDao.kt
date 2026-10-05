@@ -36,6 +36,18 @@ interface RideLogDao {
     @Query("SELECT * FROM ride_logs WHERE timestamp >= :sinceTimestamp ORDER BY timestamp DESC")
     suspend fun getLogsSince(sinceTimestamp: Long): List<RideLog>
 
+    @Query("SELECT * FROM ride_logs WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): RideLog?
+
+    @Query("SELECT * FROM ride_logs WHERE fingerprint = :fingerprint ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestByFingerprint(fingerprint: String): RideLog?
+
+    @Query("SELECT * FROM ride_logs WHERE appId = :appId AND timestamp >= :sinceTimestamp ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestOfferSince(appId: String, sinceTimestamp: Long): RideLog?
+
+    @Query("UPDATE ride_logs SET outcome = :outcome WHERE id = :id")
+    suspend fun updateOutcome(id: Long, outcome: String)
+
     @Query("UPDATE ride_logs SET rawCard = NULL WHERE id NOT IN (SELECT id FROM ride_logs ORDER BY timestamp DESC LIMIT 100)")
     suspend fun pruneOldRawCards()
 }

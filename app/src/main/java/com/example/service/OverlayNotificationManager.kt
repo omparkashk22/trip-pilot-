@@ -21,7 +21,7 @@ class OverlayNotificationManager(private val context: Context) {
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    fun createForegroundNotification(): Notification {
+    fun createForegroundNotification(isTurbo: Boolean = true): Notification {
         val launchIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -42,9 +42,12 @@ class OverlayNotificationManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val title = if (isTurbo) "TripPilot Active · Turbo" else "TripPilot Active"
+        val desc = if (isTurbo) "Turbo mode active · Watching ride offers" else "Watching ride offers for Bharat Taxi & Rapido"
+
         return NotificationCompat.Builder(context, TripPilotApp.CHANNEL_SERVICE_ID)
-            .setContentTitle("TripPilot Active")
-            .setContentText("Watching ride offers for Bharat Taxi & Rapido")
+            .setContentTitle(title)
+            .setContentText(desc)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

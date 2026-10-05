@@ -13,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.model.DriverFilter
 import com.example.data.model.LocationKeyword
 import com.example.data.model.StrategyStats
+import com.example.domain.engine.FilterSnapshot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -63,6 +64,15 @@ class PreferencesManager(private val context: Context) {
         val KEY_SHOW_DEBUG_INFO = booleanPreferencesKey("show_debug_info")
         val KEY_CAPTURE_ON_NEXT_OFFER = booleanPreferencesKey("capture_on_next_offer")
         val KEY_STRATEGY_STATS_JSON = stringPreferencesKey("strategy_stats_json")
+        val KEY_TURBO_MODE = booleanPreferencesKey("turbo_mode")
+    }
+
+    val turboMode: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_TURBO_MODE] ?: true
+    }.distinctUntilChanged()
+
+    suspend fun setTurboMode(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_TURBO_MODE] = enabled }
     }
 
     val isDisclaimerAccepted: Flow<Boolean> = context.dataStore.data.map {
@@ -137,10 +147,71 @@ class PreferencesManager(private val context: Context) {
             minFarePerKm = prefs[KEY_MIN_FARE_PER_KM] ?: 0.0,
             isLocationFilterEnabled = prefs[KEY_LOC_FILTER_ENABLED] ?: false,
             locationKeywords = locList,
-            allowedRideTypes = prefs[KEY_ALLOWED_RIDE_TYPES] ?: emptySet(),
+            allowedRideTypes = (prefs[KEY_ALLOWED_RIDE_TYPES] ?: emptySet())
+                .filter { com.example.domain.engine.RideTypeSanitizer.isValidAllowedRideType(it) }
+                .toSet(),
             multipleMatchStrategy = prefs[KEY_MATCH_STRATEGY] ?: "first_match"
         )
     }.distinctUntilChanged()
+
+    val filterSnapshot: Flow<FilterSnapshot> = context.dataStore.data.map { prefs ->
+        val json = prefs[KEY_LOC_KEYWORDS_JSON] ?: "[]"
+        val rejectKw = mutableListOf<String>()
+        val acceptKw = mutableListOf<String>()
+        try {
+            val array = JSONArray(json)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val kw = obj.getString("kw").trim().lowercase()
+                val isAccept = obj.getBoolean("acc")
+                if (isAccept) acceptKw.add(kw) else rejectKw.add(kw)
+            }
+        } catch (_: Exception) {}
+
+        val allowedTypes = (prefs[KEY_ALLOWED_RIDE_TYPES] ?: emptySet())
+            .filter { com.example.domain.engine.RideTypeSanitizer.isValidAllowedRideType(it) }
+            .toSet()
+
+        FilterSnapshot(
+            minFare = prefs[KEY_MIN_FARE] ?: 80.0,
+            maxFare = prefs[KEY_MAX_FARE],
+            isUnlimitedMaxFare = prefs[KEY_UNLIMITED_MAX_FARE] ?: true,
+            fareBasis = prefs[KEY_FARE_BASIS] ?: "base_extra",
+            minFarePerKm = prefs[KEY_MIN_FARE_PER_KM] ?: 0.0,
+            isDistanceFilterEnabled = prefs[KEY_DIST_FILTER_ENABLED] ?: true,
+            pickupDistanceMinKm = prefs[KEY_PICKUP_DIST_MIN] ?: 0.0,
+            pickupDistanceMaxKm = prefs[KEY_PICKUP_DIST_MAX] ?: 5.0,
+            dropDistanceMinKm = prefs[KEY_DROP_DIST_MIN] ?: 0.0,
+            dropDistanceMaxKm = prefs[KEY_DROP_DIST_MAX] ?: 150.0,
+            isLocationFilterEnabled = prefs[KEY_LOC_FILTER_ENABLED] ?: false,
+            rejectLocationKeywords = rejectKw,
+            acceptLocationKeywords = acceptKw,
+            allowedRideTypes = allowedTypes,
+            multipleMatchStrategy = prefs[KEY_MATCH_STRATEGY] ?: "first_match",
+            mode = prefs[KEY_SERVICE_MODE] ?: "auto_accept",
+            isBharatTaxiEnabled = prefs[KEY_BHARAT_TAXI_ENABLED] ?: true,
+            isRapidoEnabled = prefs[KEY_RAPIDO_ENABLED] ?: true,
+            resolvedBharatPackage = prefs[KEY_BHARAT_TAXI_PACKAGE],
+            resolvedRapidoPackage = prefs[KEY_RAPIDO_PACKAGE],
+            engineEnabled = prefs[KEY_ENGINE_ENABLED] ?: false,
+            soundEnabled = prefs[KEY_SOUND_ENABLED] ?: true,
+            vibrationEnabled = prefs[KEY_VIBRATION_ENABLED] ?: true,
+            alertOnAccept = prefs[KEY_ALERT_ON_ACCEPT] ?: true,
+            processTestRequests = prefs[KEY_PROCESS_TEST_REQUESTS] ?: true,
+            forcedTapMethod = prefs[KEY_TAP_METHOD],
+            turboMode = prefs[KEY_TURBO_MODE] ?: true
+        )
+    }.distinctUntilChanged()
+
+    suspend fun sanitizeAllowedRideTypes() {
+        context.dataStore.edit { prefs ->
+            val raw = prefs[KEY_ALLOWED_RIDE_TYPES] ?: return@edit
+            val sanitized = raw.filter { com.example.domain.engine.RideTypeSanitizer.isValidAllowedRideType(it) }.toSet()
+            if (sanitized.size != raw.size) {
+                prefs[KEY_ALLOWED_RIDE_TYPES] = sanitized
+            }
+        }
+    }
 
     suspend fun saveDriverFilter(filter: DriverFilter) {
         context.dataStore.edit { prefs ->
@@ -165,6 +236,8 @@ class PreferencesManager(private val context: Context) {
             }
             prefs[KEY_LOC_KEYWORDS_JSON] = jsonArray.toString()
             prefs[KEY_ALLOWED_RIDE_TYPES] = filter.allowedRideTypes
+                .filter { com.example.domain.engine.RideTypeSanitizer.isValidAllowedRideType(it) }
+                .toSet()
             prefs[KEY_MATCH_STRATEGY] = filter.multipleMatchStrategy
         }
     }

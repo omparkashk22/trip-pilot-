@@ -27,6 +27,91 @@ data class TapExecutionResult(
 
 object TapStrategyExecutor {
 
+    fun performMethodSync(
+        service: AccessibilityService?,
+        node: AccessibilityNodeInfo?,
+        bounds: Rect?,
+        method: TapMethodType
+    ): Boolean {
+        return when (method) {
+            TapMethodType.NODE_CLICK -> {
+                if (node != null && node.isClickable) {
+                    node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                } else false
+            }
+            TapMethodType.PARENT_CLICK -> {
+                var parent = node?.parent
+                var clicked = false
+                while (parent != null) {
+                    if (parent.isClickable) {
+                        clicked = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        break
+                    }
+                    parent = parent.parent
+                }
+                clicked
+            }
+            TapMethodType.GESTURE_TAP -> {
+                if (service != null && bounds != null && !bounds.isEmpty && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    val path = Path().apply {
+                        moveTo(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+                    }
+                    val stroke = GestureDescription.StrokeDescription(path, 0, 50)
+                    val gesture = GestureDescription.Builder().addStroke(stroke).build()
+                    service.dispatchGesture(gesture, null, null)
+                } else false
+            }
+        }
+    }
+
+    fun executeTapImmediate(
+        service: AccessibilityService?,
+        node: AccessibilityNodeInfo?,
+        nodeBounds: Rect?,
+        forcedMethod: String = "auto",
+        strategyStats: Map<String, StrategyStats> = emptyMap(),
+        attemptMethod: TapMethodType? = null
+    ): TapExecutionResult {
+        val startTime = android.os.SystemClock.uptimeMillis()
+
+        if (attemptMethod != null) {
+            val ok = performMethodSync(service, node, nodeBounds, attemptMethod)
+            val latency = android.os.SystemClock.uptimeMillis() - startTime
+            return TapExecutionResult(ok, attemptMethod, latency)
+        }
+
+        if (forcedMethod != "auto") {
+            val chosen = when (forcedMethod) {
+                "node_click" -> TapMethodType.NODE_CLICK
+                "parent_click" -> TapMethodType.PARENT_CLICK
+                "gesture" -> TapMethodType.GESTURE_TAP
+                else -> TapMethodType.NODE_CLICK
+            }
+            val ok = performMethodSync(service, node, nodeBounds, chosen)
+            val latency = android.os.SystemClock.uptimeMillis() - startTime
+            return TapExecutionResult(ok, chosen, latency)
+        }
+
+        val orderedMethods = listOf(
+            TapMethodType.NODE_CLICK,
+            TapMethodType.PARENT_CLICK,
+            TapMethodType.GESTURE_TAP
+        ).sortedByDescending { method ->
+            strategyStats[method.key]?.successRate ?: 0.5
+        }
+
+        for (method in orderedMethods) {
+            val ok = performMethodSync(service, node, nodeBounds, method)
+            if (ok) {
+                val latency = android.os.SystemClock.uptimeMillis() - startTime
+                return TapExecutionResult(true, method, latency)
+            }
+        }
+
+        val latency = android.os.SystemClock.uptimeMillis() - startTime
+        return TapExecutionResult(false, TapMethodType.NODE_CLICK, latency)
+    }
+
     suspend fun executeTap(
         service: AccessibilityService?,
         node: AccessibilityNodeInfo?,

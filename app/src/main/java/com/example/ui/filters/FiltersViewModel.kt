@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.model.DriverFilter
 import com.example.data.model.LocationKeyword
 import com.example.data.repository.FilterRepository
+import com.example.domain.engine.RideTypeSanitizer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -68,17 +69,19 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
                 isLocationFilterEnabled.value = f.isLocationFilterEnabled
                 locationKeywords.value = f.locationKeywords
 
-                allowedRideTypes.value = f.allowedRideTypes
+                allowedRideTypes.value = f.allowedRideTypes.filter { RideTypeSanitizer.isValidAllowedRideType(it) }.toSet()
                 multipleMatchStrategy.value = f.multipleMatchStrategy
 
                 // If user has saved custom ride types that aren't in defaults, add them
                 val extraBharat = f.allowedRideTypes.filter { t ->
-                    t.contains("Cab", ignoreCase = true) || t.contains("Intercity", ignoreCase = true) || t.contains("Economy", ignoreCase = true)
+                    RideTypeSanitizer.isValidAllowedRideType(t) && (t.contains("Cab", ignoreCase = true) || t.contains("Intercity", ignoreCase = true) || t.contains("Economy", ignoreCase = true))
                 }
                 if (extraBharat.isNotEmpty()) {
                     bharatTaxiRideTypes.value = (bharatTaxiRideTypes.value + extraBharat).distinct()
                 }
-                val extraRapido = f.allowedRideTypes.filter { !bharatTaxiRideTypes.value.contains(it) }
+                val extraRapido = f.allowedRideTypes.filter { t ->
+                    RideTypeSanitizer.isValidAllowedRideType(t) && !bharatTaxiRideTypes.value.contains(t)
+                }
                 if (extraRapido.isNotEmpty()) {
                     rapidoRideTypes.value = (rapidoRideTypes.value + extraRapido).distinct()
                 }
@@ -114,7 +117,7 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
 
     fun addCustomRideType() {
         val type = customRideTypeInput.value.trim()
-        if (type.isEmpty()) return
+        if (type.isEmpty() || !RideTypeSanitizer.isValidAllowedRideType(type)) return
 
         if (selectedAppForCustomType.value == "bharat_taxi") {
             if (!bharatTaxiRideTypes.value.contains(type)) {
@@ -134,7 +137,7 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
 
     fun recordDiscoveredRideType(appId: String, rideType: String) {
         val clean = rideType.trim()
-        if (clean.isEmpty()) return
+        if (clean.isEmpty() || !RideTypeSanitizer.isValidAllowedRideType(clean)) return
         if (appId == "bharat_taxi") {
             if (!bharatTaxiRideTypes.value.any { it.equals(clean, ignoreCase = true) }) {
                 bharatTaxiRideTypes.value = bharatTaxiRideTypes.value + clean
@@ -175,7 +178,7 @@ class FiltersViewModel(private val filterRepository: FilterRepository) : ViewMod
                 minFarePerKm = minRate,
                 isLocationFilterEnabled = isLocationFilterEnabled.value,
                 locationKeywords = locationKeywords.value,
-                allowedRideTypes = emptySet(),
+                allowedRideTypes = allowedRideTypes.value.filter { RideTypeSanitizer.isValidAllowedRideType(it) }.toSet(),
                 multipleMatchStrategy = multipleMatchStrategy.value
             )
             filterRepository.saveFilter(updated)

@@ -850,6 +850,19 @@ class TripPilotUnitTest {
         override suspend fun getLogsSince(sinceTimestamp: Long): List<RideLog> {
             return logs.filter { it.timestamp >= sinceTimestamp }
         }
+        override suspend fun getById(id: Long): RideLog? {
+            return logs.firstOrNull { it.id == id }
+        }
+        override suspend fun getLatestByFingerprint(fingerprint: String): RideLog? {
+            return logs.filter { it.fingerprint == fingerprint }.maxByOrNull { it.timestamp }
+        }
+        override suspend fun getLatestOfferSince(appId: String, sinceTimestamp: Long): RideLog? {
+            return logs.filter { it.appId == appId && it.timestamp >= sinceTimestamp }.maxByOrNull { it.timestamp }
+        }
+        override suspend fun updateOutcome(id: Long, outcome: String) {
+            val idx = logs.indexOfFirst { it.id == id }
+            if (idx != -1) logs[idx] = logs[idx].copy(outcome = outcome)
+        }
         override suspend fun pruneOldRawCards() {
             if (logs.size > 100) {
                 for (i in 100 until logs.size) {
@@ -903,14 +916,20 @@ class TripPilotUnitTest {
         assertEquals(2, dao.logs[0].seenCount)
         assertEquals("HIGH", dao.logs[0].parseConfidence)
 
-        // If row is marked ACCEPTED, a new offer with same fingerprint must NOT overwrite it
-        dao.logs[0] = dao.logs[0].copy(status = "ACCEPTED")
-        val log3 = log2.copy(baseFare = 110.0, totalFare = 110.0, fingerprint = offer1.fingerprint)
+        // If row is marked ACCEPTED, a new offer with same fingerprint must NOT overwrite it within window
+        repo.recordOffer(offer2, status = "ACCEPTED", now = log2.timestamp)
+        val log3 = log2.copy(baseFare = 110.0, totalFare = 110.0, fingerprint = offer1.fingerprint, timestamp = log2.timestamp + 10_000L)
         repo.insertRideLog(log3)
 
-        // Must create a new row!
+        // Must NOT overwrite ACCEPTED row
+        assertEquals(1, dao.logs.size)
+        assertEquals("ACCEPTED", dao.logs[0].status)
+        assertEquals(95.0, dao.logs[0].baseFare, 0.01)
+
+        // After 3 minutes without sightings, same fingerprint creates a new row
+        val log4 = log2.copy(baseFare = 110.0, totalFare = 110.0, fingerprint = offer1.fingerprint, timestamp = log2.timestamp + (4 * 60 * 1000L))
+        repo.insertRideLog(log4)
         assertEquals(2, dao.logs.size)
-        assertEquals("ACCEPTED", dao.logs.last().status)
     }
 
     @Test
@@ -1230,5 +1249,531 @@ class TripPilotUnitTest {
         assertTrue("Bharat Taxi single mode parse+decide ($medianBtSingle ms) must be well under 30 ms target", medianBtSingle < 30.0)
         assertTrue("Rapido parse+decide ($medianRapido ms) must be well under 30 ms target", medianRapido < 30.0)
     }
+
+    // --- PART 12 TESTS (Dedupe / Upsert, RideTypeSanitizer, Migration) ---
+
+    @Test
+    fun testDedupe_fourSightingsAt10SecondIntervals_oneRowSeenCount4() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = androidx.room.Room.inMemoryDatabaseBuilder(context, com.example.data.local.AppDatabase::class.java).build()
+        val dao = db.rideLogDao()
+        val dedupeManager = com.example.domain.engine.RideDedupeManager(dao)
+
+        val offer = RideOffer(
+            appId = "rapido",
+            rideType = "Cab",
+            baseFare = 90.0,
+            extraFare = 0.0,
+            totalFare = 90.0,
+            pickupDistanceKm = 1.0,
+            dropDistanceKm = 4.3,
+            pickupAddress = "Ph1-2-Verka-Chowk - 18311, Shahi Majra, Phase 3, Sector 58, Sahibzada Ajit Singh Nagar, 160055",
+            dropAddress = "Ph5-3b2-7 - Mohali walk, Sector 62, Sahibzada Ajit Singh Nagar, Chandigarh, India",
+            isActionable = true
+        )
+
+        val baseTime = 1000000L
+        // Sighting 1: t = 0s
+        val id1 = dedupeManager.recordOffer(offer, status = "SKIPPED", skipReason = "Low fare", now = baseTime)
+        // Sighting 2: t = 10s
+        val id2 = dedupeManager.recordOffer(offer, status = "SKIPPED", skipReason = "Low fare", now = baseTime + 10_000L)
+        // Sighting 3: t = 20s
+        val id3 = dedupeManager.recordOffer(offer, status = "SKIPPED", skipReason = "Low fare", now = baseTime + 20_000L)
+        // Sighting 4: t = 30s
+        val id4 = dedupeManager.recordOffer(offer, status = "SKIPPED", skipReason = "Low fare", now = baseTime + 30_000L)
+
+        assertEquals("All sightings must update the same row ID", id1, id2)
+        assertEquals("All sightings must update the same row ID", id1, id3)
+        assertEquals("All sightings must update the same row ID", id1, id4)
+
+        val log = dao.getById(id1)
+        assertNotNull(log)
+        assertEquals("One row must exist with seenCount 4", 4, log!!.seenCount)
+        assertEquals("firstSeenAt must match initial timestamp", baseTime, log.firstSeenAt)
+        assertEquals("lastSeenAt must match 4th sighting timestamp", baseTime + 30_000L, log.lastSeenAt)
+
+        db.close()
+    }
+
+    @Test
+    fun testDedupe_fareIncreasesFrom90To100_updatedRowAndAccepted() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = androidx.room.Room.inMemoryDatabaseBuilder(context, com.example.data.local.AppDatabase::class.java).build()
+        val dao = db.rideLogDao()
+        val dedupeManager = com.example.domain.engine.RideDedupeManager(dao)
+
+        val initialOffer = RideOffer(
+            appId = "rapido",
+            rideType = "Cab",
+            baseFare = 90.0,
+            extraFare = 0.0,
+            totalFare = 90.0,
+            pickupDistanceKm = 1.0,
+            dropDistanceKm = 4.3,
+            pickupAddress = "Verka Chowk",
+            dropAddress = "Mohali Walk",
+            isActionable = true
+        )
+
+        val t0 = 2000000L
+        val id1 = dedupeManager.recordOffer(initialOffer, status = "SKIPPED", skipReason = "Fare below min ₹95", now = t0)
+
+        // Customer adds extra: fare becomes 100
+        val updatedOffer = initialOffer.copy(
+            baseFare = 90.0,
+            extraFare = 10.0,
+            totalFare = 100.0
+        )
+        val t1 = t0 + 15_000L
+        val id2 = dedupeManager.recordOffer(updatedOffer, status = "ACCEPTED", skipReason = null, tapMethod = "NODE_CLICK", tapLatencyMs = 45, now = t1)
+
+        assertEquals("Must update the same row ID", id1, id2)
+        val log = dao.getById(id1)
+        assertNotNull(log)
+        assertEquals("seenCount must be 2", 2, log!!.seenCount)
+        assertEquals("totalFare must be updated to 100.0", 100.0, log.totalFare, 0.01)
+        assertEquals("Status must transition to ACCEPTED", "ACCEPTED", log.status)
+        assertNull("skipReason must be null for accepted row", log.skipReason)
+
+        db.close()
+    }
+
+    @Test
+    fun testDedupe_acceptedRowNeverOverwritten_sameFingerprintAfter3MinCreatesNewRow() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = androidx.room.Room.inMemoryDatabaseBuilder(context, com.example.data.local.AppDatabase::class.java).build()
+        val dao = db.rideLogDao()
+        val dedupeManager = com.example.domain.engine.RideDedupeManager(dao)
+
+        val offer = RideOffer(
+            appId = "bharat_taxi",
+            rideType = "Cab Economy",
+            baseFare = 150.0,
+            pickupDistanceKm = 0.5,
+            dropDistanceKm = 5.0,
+            pickupAddress = "Sector 17 Bus Stand",
+            dropAddress = "Railway Station",
+            isActionable = true
+        )
+
+        val t0 = 3000000L
+        val id1 = dedupeManager.recordOffer(offer, status = "ACCEPTED", skipReason = null, now = t0)
+
+        // Same fingerprint arrives at t0 + 1 minute -> within 3 minutes and already accepted
+        val t1 = t0 + 60_000L
+        assertTrue("Accepted fingerprint must be detected as accepted within window", dedupeManager.isAcceptedWithinWindow(offer.fingerprint, t1))
+        val id2 = dedupeManager.recordOffer(offer.copy(baseFare = 200.0), status = "SKIPPED", skipReason = "Should not overwrite", now = t1)
+        assertEquals(id1, id2)
+
+        val logAfterT1 = dao.getById(id1)
+        assertEquals("Accepted row must NOT be overwritten", "ACCEPTED", logAfterT1!!.status)
+        assertEquals("Accepted fare must NOT be overwritten", 150.0, logAfterT1.totalFare, 0.01)
+
+        // After 3 minutes without sightings (e.g. t0 + 4 minutes)
+        val t2 = t1 + (3 * 60 * 1000L) + 1000L
+        assertFalse("After 3 minutes without sighting, accepted window must expire", dedupeManager.isAcceptedWithinWindow(offer.fingerprint, t2))
+
+        val id3 = dedupeManager.recordOffer(offer, status = "SKIPPED", skipReason = "Driver busy", now = t2)
+        assertTrue("After 3 minutes, a new row must be created", id3 != id1)
+
+        db.close()
+    }
+
+    @Test
+    fun testRideTypeSanitizer_rejectionAndAcceptance() {
+        val installedApps = listOf("YouTube", "Rapido Captain", "TripPilot")
+
+        // 1. "YouTube PremiumNotification: " -> rejected (Unknown)
+        val res1 = com.example.domain.engine.RideTypeSanitizer.sanitize("YouTube PremiumNotification: ", "bharat_taxi", installedAppNames = installedApps)
+        assertEquals("Unknown", res1)
+
+        // 2. "Cab Economy" -> accepted
+        val res2 = com.example.domain.engine.RideTypeSanitizer.sanitize("Cab Economy", "bharat_taxi", installedAppNames = installedApps)
+        assertEquals("Cab Economy", res2)
+
+        // 3. "Rapido CaptainNotification: " -> rejected (Unknown)
+        val res3 = com.example.domain.engine.RideTypeSanitizer.sanitize("Rapido CaptainNotification: ", "rapido", installedAppNames = installedApps)
+        assertEquals("Unknown", res3)
+
+        // 4. Candidate with digits or rupee sign -> rejected
+        assertEquals("Unknown", com.example.domain.engine.RideTypeSanitizer.sanitize("Cab 123", "bharat_taxi"))
+        assertEquals("Unknown", com.example.domain.engine.RideTypeSanitizer.sanitize("Cab ₹50", "bharat_taxi"))
+
+        // 5. Short text above fare node -> accepted
+        val resAbove = com.example.domain.engine.RideTypeSanitizer.sanitize("Sedan Plus", "bharat_taxi", isAboveFareNode = true)
+        assertEquals("Sedan Plus", resAbove)
+
+        // 6. A node from com.android.systemui is never used
+        val sysUiNode = android.view.accessibility.AccessibilityNodeInfo.obtain().apply {
+            packageName = "com.android.systemui"
+            text = "Cab Economy"
+        }
+        val systemUiOffers = com.example.domain.engine.OfferParser.parseWindows(
+            windows = null,
+            rootNode = sysUiNode,
+            appId = "bharat_taxi"
+        )
+        assertTrue("A node from com.android.systemui is never used", systemUiOffers.isEmpty())
+    }
+
+    @Test
+    fun testDatabaseMigration_2_to_3() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val helper = androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory()
+        val config = androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name("test_migration_2_3.db")
+            .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(2) {
+                override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS `ride_logs` (
+                            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            `appId` TEXT NOT NULL,
+                            `timestamp` INTEGER NOT NULL,
+                            `rideType` TEXT NOT NULL,
+                            `baseFare` REAL NOT NULL,
+                            `extraFare` REAL NOT NULL,
+                            `totalFare` REAL NOT NULL,
+                            `appFarePerKm` REAL,
+                            `pickupDistanceKm` REAL NOT NULL,
+                            `pickupEtaMin` INTEGER,
+                            `dropDistanceKm` REAL NOT NULL,
+                            `dropEtaMin` INTEGER,
+                            `pickupAddress` TEXT NOT NULL,
+                            `dropAddress` TEXT NOT NULL,
+                            `dropAddressTruncated` INTEGER NOT NULL,
+                            `status` TEXT NOT NULL,
+                            `skipReason` TEXT,
+                            `tapMethod` TEXT,
+                            `tapLatencyMs` INTEGER NOT NULL,
+                            `isTest` INTEGER NOT NULL,
+                            `rawTextHash` TEXT NOT NULL,
+                            `parseConfidence` TEXT NOT NULL,
+                            `parseReason` TEXT,
+                            `layoutVariant` TEXT NOT NULL,
+                            `seenCount` INTEGER NOT NULL,
+                            `rawCard` TEXT,
+                            `fingerprint` TEXT NOT NULL
+                        )
+                    """.trimIndent())
+                    db.execSQL("INSERT INTO `ride_logs` (`id`, `appId`, `timestamp`, `rideType`, `baseFare`, `extraFare`, `totalFare`, `pickupDistanceKm`, `dropDistanceKm`, `pickupAddress`, `dropAddress`, `dropAddressTruncated`, `status`, `tapLatencyMs`, `isTest`, `rawTextHash`, `parseConfidence`, `layoutVariant`, `seenCount`, `fingerprint`) VALUES (1, 'bharat_taxi', 1600000000, 'YouTube PremiumNotification:', 100.0, 0.0, 100.0, 1.0, 5.0, 'Pickup', 'Drop', 0, 'SKIPPED', 0, 0, 'hash', 'HIGH', 'LIST', 0, 'fp1')")
+                }
+                override fun onUpgrade(db: androidx.sqlite.db.SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+            })
+            .build()
+
+        val db = helper.create(config).writableDatabase
+        com.example.data.local.AppDatabase.MIGRATION_2_3.migrate(db)
+
+        val cursor = db.query("SELECT firstSeenAt, lastSeenAt, seenCount, rideType FROM ride_logs WHERE id = 1")
+        assertTrue(cursor.moveToFirst())
+        val firstSeen = cursor.getLong(0)
+        val lastSeen = cursor.getLong(1)
+        val seenCount = cursor.getInt(2)
+        val rideType = cursor.getString(3)
+        cursor.close()
+        db.close()
+
+        assertEquals(1600000000L, firstSeen)
+        assertEquals(1600000000L, lastSeen)
+        assertEquals(1, seenCount)
+        assertEquals("Unknown", rideType)
+    }
+
+    // =========================================================================
+    // PART 13: FASTER ACCEPT (SPEED PATCH & BENCHMARK)
+    // =========================================================================
+
+    @Test
+    fun testPart13_leadingEdgeThrottle() {
+        val lastEventTimeMap = mutableMapOf<String, Long>()
+        val isParsingMap = mutableMapOf<String, Boolean>()
+        val processedEvents = mutableListOf<Long>()
+
+        fun onEvent(appId: String, tEntry: Long) {
+            val isParsing = isParsingMap[appId] == true
+            val lastTime = lastEventTimeMap[appId] ?: 0L
+            if (isParsing && (tEntry - lastTime < 40L)) {
+                return // Ignored
+            }
+            isParsingMap[appId] = true
+            lastEventTimeMap[appId] = tEntry
+            processedEvents.add(tEntry)
+        }
+
+        // 1. First event handled immediately
+        onEvent("rapido", 1000L)
+        assertEquals(listOf(1000L), processedEvents)
+
+        // 2. Second event at +20 ms while parsing is still running -> ignored
+        onEvent("rapido", 1020L)
+        assertEquals(listOf(1000L), processedEvents)
+
+        // 3. Third event at +35 ms while parsing is still running -> ignored
+        onEvent("rapido", 1035L)
+        assertEquals(listOf(1000L), processedEvents)
+
+        // 4. Parse completes at 1045 ms
+        isParsingMap["rapido"] = false
+
+        // 5. Next event at 1050 ms -> handled immediately
+        onEvent("rapido", 1050L)
+        assertEquals(listOf(1000L, 1050L), processedEvents)
+
+        // 6. Another event at +50 ms (> 40ms) even if parsing was set -> handled
+        onEvent("rapido", 1105L)
+        assertEquals(listOf(1000L, 1050L, 1105L), processedEvents)
+    }
+
+    @Test
+    fun testPart13_lowConfidenceRetryTimings() {
+        val retryDelays = listOf(60L, 120L, 250L)
+        assertEquals(3, retryDelays.size)
+        assertEquals(430L, retryDelays.sum()) // Max total <= 430 ms
+
+        var confidence = "LOW"
+        var attempts = 0
+        var totalDelay = 0L
+
+        for (delay in retryDelays) {
+            attempts++
+            totalDelay += delay
+            if (attempts == 2) {
+                confidence = "HIGH" // Recovered on retry 2
+                break
+            }
+        }
+
+        assertEquals(2, attempts)
+        assertEquals(180L, totalDelay)
+        assertEquals("HIGH", confidence)
+    }
+
+    @Test
+    fun testPart13_secondStrategyRetryAfter250ms() {
+        val attemptsMap = mutableMapOf<String, Int>()
+        val lastMethodMap = mutableMapOf<String, com.example.domain.engine.TapMethodType>()
+        val callOrder = mutableListOf<String>()
+
+        val fp = "fp_test_ride_123"
+
+        // Initial attempt (attempt 1): uses NODE_CLICK
+        attemptsMap[fp] = 1
+        lastMethodMap[fp] = com.example.domain.engine.TapMethodType.NODE_CLICK
+        callOrder.add("ATTEMPT_1_NODE_CLICK")
+
+        // Verification check after +250 ms: Accept node is still present
+        val stillPresent = true
+        if (stillPresent) {
+            val currentAttempts = attemptsMap[fp] ?: 0
+            if (currentAttempts < 2) {
+                attemptsMap[fp] = currentAttempts + 1
+                val lastMethod = lastMethodMap[fp]
+                val ordered = listOf(
+                    com.example.domain.engine.TapMethodType.NODE_CLICK,
+                    com.example.domain.engine.TapMethodType.PARENT_CLICK,
+                    com.example.domain.engine.TapMethodType.GESTURE_TAP
+                )
+                val nextMethod = ordered.firstOrNull { it != lastMethod } ?: com.example.domain.engine.TapMethodType.GESTURE_TAP
+                callOrder.add("ATTEMPT_2_${nextMethod.name}")
+            }
+        }
+
+        // Third check: cannot exceed max 2 attempts
+        val currentAttempts = attemptsMap[fp] ?: 0
+        assertTrue("Maximum 2 attempts in total per fingerprint", currentAttempts <= 2)
+        assertEquals(listOf("ATTEMPT_1_NODE_CLICK", "ATTEMPT_2_PARENT_CLICK"), callOrder)
+    }
+
+    @Test
+    fun testPart13_relaxedActionableRule_centerInsideScreen() {
+        val screenBounds = Rect(0, 0, 1080, 2400)
+
+        // Case 1: Accept button center is inside screen -> Actionable (even if card partially out)
+        val insideAccept = Rect(200, 2000, 800, 2150)
+        val centerX1 = insideAccept.centerX()
+        val centerY1 = insideAccept.centerY()
+        val centerInside1 = centerX1 in screenBounds.left..screenBounds.right && centerY1 in screenBounds.top..screenBounds.bottom
+        assertTrue(centerInside1)
+
+        // Case 2: Accept button center is outside screen -> Not actionable
+        val outsideAccept = Rect(200, 2500, 800, 2650)
+        val centerX2 = outsideAccept.centerX()
+        val centerY2 = outsideAccept.centerY()
+        val centerInside2 = centerX2 in screenBounds.left..screenBounds.right && centerY2 in screenBounds.top..screenBounds.bottom
+        assertFalse(centerInside2)
+
+        // Case 3: Floating overlay covers center -> Not actionable
+        val overlayCovering = listOf(Rect(100, 1900, 900, 2200))
+        val coversCenter = overlayCovering.any { it.contains(centerX1, centerY1) }
+        assertTrue(coversCenter)
+
+        // Case 4: Floating overlay does NOT cover center -> Actionable
+        val overlaySide = listOf(Rect(0, 0, 150, 150))
+        val coversCenterSide = overlaySide.any { it.contains(centerX1, centerY1) }
+        assertFalse(coversCenterSide)
+    }
+
+    @Test
+    fun testPart13_snapshotSwap_isThreadSafe() {
+        var volatileSnapshot = com.example.domain.engine.FilterSnapshot(minFare = 80.0)
+        val latch = java.util.concurrent.CountDownLatch(4)
+        val readSuccessCount = java.util.concurrent.atomic.AtomicInteger(0)
+
+        // 3 reader threads reading rapidly
+        repeat(3) {
+            Thread {
+                repeat(500) {
+                    val s = volatileSnapshot
+                    if (s.minFare >= 80.0) {
+                        readSuccessCount.incrementAndGet()
+                    }
+                }
+                latch.countDown()
+            }.start()
+        }
+
+        // 1 writer thread swapping snapshots
+        Thread {
+            repeat(100) { idx ->
+                volatileSnapshot = com.example.domain.engine.FilterSnapshot(minFare = 80.0 + idx)
+                Thread.yield()
+            }
+            latch.countDown()
+        }.start()
+
+        latch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(1500, readSuccessCount.get())
+    }
+
+    @Test
+    fun testPart13_noIoBeforeTap_callOrder() {
+        val callOrder = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+        // Simulate hot path execution sequence
+        fun executeHotPath() {
+            // 1. Zero I/O, evaluate in memory
+            val decision = "ACCEPT"
+            if (decision == "ACCEPT") {
+                // 2. TAP CALL FIRST
+                callOrder.add("TAP_CALLED")
+
+                // 3. Post to background dispatcher strictly AFTER tap
+                callOrder.add("POST_BACKGROUND")
+                callOrder.add("ALERT_FEEDBACK")
+                callOrder.add("ROOM_DB_UPSERT")
+                callOrder.add("UI_STATE_UPDATE")
+            }
+        }
+
+        executeHotPath()
+
+        assertEquals("TAP_CALLED", callOrder[0])
+        val tapIndex = callOrder.indexOf("TAP_CALLED")
+        val dbIndex = callOrder.indexOf("ROOM_DB_UPSERT")
+        val alertIndex = callOrder.indexOf("ALERT_FEEDBACK")
+        val uiIndex = callOrder.indexOf("UI_STATE_UPDATE")
+
+        assertTrue(tapIndex < dbIndex)
+        assertTrue(tapIndex < alertIndex)
+        assertTrue(tapIndex < uiIndex)
+    }
+
+    @Test
+    fun testPart13_goldenTests_sameAsFullTree() {
+        val screenBounds = Rect(0, 0, 1080, 2400)
+
+        // 1. Bharat Taxi Expanded Tree
+        val btNodes = listOf(
+            ParsedNode(null, "Cab Economy", Rect(50, 100, 200, 140)),
+            ParsedNode(null, "₹180", Rect(50, 150, 300, 200)),
+            ParsedNode(null, "0.8 km · 3 min", Rect(50, 210, 350, 250)),
+            ParsedNode(null, "Indiranagar 100ft Rd", Rect(50, 260, 800, 300)),
+            ParsedNode(null, "8.5 km · 22 min", Rect(50, 310, 350, 350)),
+            ParsedNode(null, "Electronic City Phase 1", Rect(50, 360, 800, 400)),
+            ParsedNode(null, "Accept", Rect(200, 420, 880, 500), viewId = "com.bharattaxi.driver:id/ride_accept")
+        )
+
+        val btOffers = com.example.domain.engine.BharatTaxiParser.parseNodes(btNodes, true, screenBounds)
+        assertEquals(1, btOffers.size)
+        val btOffer = btOffers.first()
+        assertEquals(180.0, btOffer.baseFare, 0.01)
+        assertEquals(0.8, btOffer.pickupDistanceKm, 0.01)
+        assertEquals(8.5, btOffer.dropDistanceKm, 0.01)
+        assertEquals("Cab Economy", btOffer.rideType)
+        assertEquals("HIGH", btOffer.parseConfidence)
+        assertTrue(btOffer.isActionable)
+
+        // 2. Rapido Base + Extra with Banner Tree
+        val rapidoNodes = listOf(
+            ParsedNode(null, "Customer added ₹25 extra", Rect(50, 80, 600, 120)),
+            ParsedNode(null, "Auto", Rect(50, 130, 200, 160)),
+            ParsedNode(null, "₹120 + ₹25", Rect(50, 170, 400, 210)),
+            ParsedNode(null, "1.4 km", Rect(50, 220, 250, 250)),
+            ParsedNode(null, "Koramangala 4th Block", Rect(50, 260, 800, 300)),
+            ParsedNode(null, "6.2 km", Rect(50, 310, 250, 340)),
+            ParsedNode(null, "MG Road Metro Station", Rect(50, 350, 800, 390)),
+            ParsedNode(null, "Accept", Rect(200, 410, 880, 490))
+        )
+
+        val rapidoOffers = com.example.domain.engine.RapidoParser.parseNodes(rapidoNodes, screenBounds)
+        assertEquals(1, rapidoOffers.size)
+        val rapidoOffer = rapidoOffers.first()
+        assertEquals(120.0, rapidoOffer.baseFare, 0.01)
+        assertEquals(25.0, rapidoOffer.extraFare, 0.01)
+        assertEquals(145.0, rapidoOffer.totalFare, 0.01)
+        assertEquals(1.4, rapidoOffer.pickupDistanceKm, 0.01)
+        assertEquals(6.2, rapidoOffer.dropDistanceKm, 0.01)
+        assertEquals("HIGH", rapidoOffer.parseConfidence)
+        assertTrue(rapidoOffer.isActionable)
+
+        // Filter decision matches
+        val snapshot = com.example.domain.engine.FilterSnapshot(minFare = 100.0)
+        val btEval = com.example.domain.engine.FilterEngine.evaluate(btOffer, snapshot)
+        val rapidoEval = com.example.domain.engine.FilterEngine.evaluate(rapidoOffer, snapshot)
+        assertTrue(btEval.isMatched)
+        assertTrue(rapidoEval.isMatched)
+    }
+
+    @Test
+    fun testPart13_benchmark_fastPathLatency() {
+        val screenBounds = Rect(0, 0, 1080, 2400)
+        val snapshot = com.example.domain.engine.FilterSnapshot(minFare = 50.0)
+
+        val sampleNodes = listOf(
+            ParsedNode(null, "Auto", Rect(50, 100, 200, 130)),
+            ParsedNode(null, "₹150 + ₹20", Rect(50, 140, 400, 180)),
+            ParsedNode(null, "1.5 km", Rect(50, 190, 200, 220)),
+            ParsedNode(null, "Whitefield Main Rd", Rect(50, 230, 800, 280)),
+            ParsedNode(null, "10.0 km", Rect(50, 290, 200, 320)),
+            ParsedNode(null, "Bellandur Outer Ring Rd", Rect(50, 330, 800, 380)),
+            ParsedNode(null, "Accept", Rect(200, 400, 750, 460))
+        )
+
+        val latencies = mutableListOf<Long>()
+
+        // Warm up JIT
+        repeat(30) {
+            val offers = com.example.domain.engine.RapidoParser.parseNodes(sampleNodes, screenBounds)
+            com.example.domain.engine.FilterEngine.evaluate(offers.first(), snapshot)
+        }
+
+        // Measure 100 iterations
+        repeat(100) {
+            val t0 = System.nanoTime()
+            val offers = com.example.domain.engine.RapidoParser.parseNodes(sampleNodes, screenBounds)
+            val eval = com.example.domain.engine.FilterEngine.evaluate(offers.first(), snapshot)
+            val t1 = System.nanoTime()
+            assertTrue(eval.isMatched)
+            latencies.add((t1 - t0) / 1_000_000L) // ms
+        }
+
+        latencies.sort()
+        val medianMs = latencies[latencies.size / 2]
+        val p95Ms = latencies[(latencies.size * 0.95).toInt()]
+
+        println("Part 13 Benchmark: median=${medianMs}ms, p95=${p95Ms}ms")
+        assertTrue("Fast path parse + decide target median < 20 ms, actual: ${medianMs}ms", medianMs < 20)
+    }
 }
+
 

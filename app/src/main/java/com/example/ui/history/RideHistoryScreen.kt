@@ -100,6 +100,11 @@ fun RideHistoryScreen(viewModel: HistoryViewModel) {
         animationSpec = tween(500, easing = FastOutSlowInEasing),
         label = "anim_skip"
     )
+    val animMissed by animateIntAsState(
+        targetValue = todayStats.missedCount,
+        animationSpec = tween(500, easing = FastOutSlowInEasing),
+        label = "anim_missed"
+    )
     val animFare by animateIntAsState(
         targetValue = todayStats.totalAcceptedFare.toInt(),
         animationSpec = tween(500, easing = FastOutSlowInEasing),
@@ -210,6 +215,12 @@ fun RideHistoryScreen(viewModel: HistoryViewModel) {
                             label = stringResource(R.string.stat_skipped),
                             value = "$animSkipped",
                             color = colors.warning
+                        )
+                        Box(modifier = Modifier.height(24.dp).width(1.dp).background(colors.hairline))
+                        MiniStat(
+                            label = "Missed",
+                            value = "$animMissed",
+                            color = colors.danger
                         )
                         Box(modifier = Modifier.height(24.dp).width(1.dp).background(colors.hairline))
                         MiniStat(
@@ -445,6 +456,46 @@ fun CompactRideLogCard(
                     }
                 }
 
+                // Missed pill when outcome == MISSED
+                if (log.outcome.equals("MISSED", ignoreCase = true)) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Surface(
+                        color = colors.danger.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(1.dp, colors.danger.copy(alpha = 0.5f)),
+                        modifier = Modifier.heightIn(min = 18.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                            Text(
+                                text = "Missed",
+                                color = colors.danger,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // Small "×N" pill next to the status when seenCount > 1
+                if (log.seenCount > 1) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Surface(
+                        color = colors.warning.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(1.dp, colors.warning.copy(alpha = 0.5f)),
+                        modifier = Modifier.heightIn(min = 18.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                            Text(
+                                text = "×${log.seenCount}",
+                                color = colors.warning,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
                 // Amber "?" pill for LOW/MEDIUM confidence
                 if (log.parseConfidence.equals("LOW", ignoreCase = true) || log.parseConfidence.equals("MEDIUM", ignoreCase = true)) {
                     Spacer(modifier = Modifier.width(4.dp))
@@ -536,6 +587,19 @@ fun CompactRideLogCard(
                 }
                 Spacer(modifier = Modifier.height(6.dp))
 
+                // Sighting info: "First seen 9:10 PM · last seen 9:11 PM · seen 4×"
+                val firstSeenTime = if (log.firstSeenAt > 0) log.firstSeenAt else log.timestamp
+                val lastSeenTime = if (log.lastSeenAt > 0) log.lastSeenAt else log.timestamp
+                val firstSeenStr = dateFormat.format(Date(firstSeenTime))
+                val lastSeenStr = dateFormat.format(Date(lastSeenTime))
+                Text(
+                    text = "First seen $firstSeenStr · last seen $lastSeenStr · seen ${log.seenCount}×",
+                    color = colors.textSecondary,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
                 // Ride Type & Breakdown
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -581,8 +645,9 @@ fun CompactRideLogCard(
                 // Debug line
                 if (showDebugInfo) {
                     Spacer(modifier = Modifier.height(4.dp))
+                    val totalMs = log.eventLagMs + log.parseMs + log.decideMs + log.tapLatencyMs
                     Text(
-                        text = "Method: ${log.tapMethod ?: "None"} | Latency: ${log.tapLatencyMs}ms | Layout: ${log.layoutVariant} | Conf: ${log.parseConfidence}",
+                        text = "lag ${log.eventLagMs} · parse ${log.parseMs} · decide ${log.decideMs} · tap ${log.tapLatencyMs} = ${totalMs} ms",
                         color = colors.textSecondary,
                         fontSize = 10.sp
                     )

@@ -91,6 +91,13 @@ class TripPilotApp : Application() {
         filterRepository = FilterRepository(preferencesManager)
         authRepository = AuthRepository(firebaseManager)
 
+        // One-time startup sanitization of allowed ride types
+        appScope.launch(Dispatchers.IO) {
+            try {
+                preferencesManager.sanitizeAllowedRideTypes()
+            } catch (_: Exception) {}
+        }
+
         // Periodic GitHub version check (on startup and every 6 hours)
         appScope.launch(Dispatchers.IO) {
             val versionChecker = com.example.data.remote.VersionChecker()

@@ -28,10 +28,19 @@ data class RideOffer(
     val layoutVariant: String = "LIST", // "LIST", "SINGLE", "RAPIDO"
     val rawCard: String? = null
 ) {
+    companion object {
+        fun normalizeForFingerprint(text: String): String {
+            return text.lowercase()
+                .replace("\\p{Punct}".toRegex(), " ")
+                .replace("\\s+".toRegex(), " ")
+                .trim()
+        }
+    }
+
     val fingerprint: String
         get() {
-            val normPickup = pickupAddress.lowercase().replace("[^a-z0-9]".toRegex(), "")
-            val normDrop = dropAddress.lowercase().replace("[^a-z0-9]".toRegex(), "")
+            val normPickup = normalizeForFingerprint(pickupAddress)
+            val normDrop = normalizeForFingerprint(dropAddress)
             val pDist = "%.1f".format(java.util.Locale.US, pickupDistanceKm)
             val dDist = "%.1f".format(java.util.Locale.US, dropDistanceKm)
             return "${appId}_${normPickup}_${normDrop}_${pDist}_${dDist}"

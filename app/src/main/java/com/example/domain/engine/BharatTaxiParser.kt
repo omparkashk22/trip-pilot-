@@ -293,30 +293,27 @@ object BharatTaxiParser {
             }
         }
 
-        // 4. Ride Type detection
-        // Order: (1) First non-empty TextView without viewId in the card
-        // (2) Known list from registry
-        for (n in cardNodes) {
-            val vid = n.viewId?.substringAfter(":id/") ?: ""
-            val text = n.text.trim()
-            if (text.isNotEmpty() && !text.startsWith("₹") && !text.contains("/km", ignoreCase = true) &&
-                !text.equals("Accept", ignoreCase = true) && !DIST_TIME_PATTERN.matcher(text).find() &&
-                !text.contains("TEST REQUEST", ignoreCase = true)
-            ) {
-                if (vid.isEmpty() || vid == "container") {
-                    val matchingKnown = KNOWN_RIDE_TYPES.firstOrNull { text.equals(it, ignoreCase = true) || text.contains(it, ignoreCase = true) }
-                    if (matchingKnown != null) {
-                        rideType = matchingKnown
-                        break
-                    }
-                }
+        // 4. Ride Type detection using RideTypeSanitizer
+        val fareTop = chosenFareNode?.bounds?.top ?: Int.MAX_VALUE
+        // (a) First check for known ride types in cardNodes (longest match wins)
+        for (known in RideTypeSanitizer.BHARAT_TAXI_KNOWN.sortedByDescending { it.length }) {
+            val matchingNode = cardNodes.firstOrNull { n ->
+                val t = n.text.trim()
+                !RideTypeSanitizer.isRejectedCandidate(t) && (t.equals(known, ignoreCase = true) || t.contains(known, ignoreCase = true))
+            }
+            if (matchingNode != null) {
+                rideType = known
+                break
             }
         }
+
+        // (b) If still Unknown, check short text (<= 24 chars) located above the fare node in the same card
         if (rideType == "Unknown") {
-            // Check any node text for known list
-            for (known in KNOWN_RIDE_TYPES) {
-                if (cardNodes.any { it.text.contains(known, ignoreCase = true) }) {
-                    rideType = known
+            for (n in cardNodes) {
+                val isAboveFare = n.bounds.top < fareTop
+                val sanitized = RideTypeSanitizer.sanitize(n.text, appId = "bharat_taxi", isAboveFareNode = isAboveFare)
+                if (sanitized != "Unknown") {
+                    rideType = sanitized
                     break
                 }
             }
@@ -386,9 +383,12 @@ object BharatTaxiParser {
 
         val acceptNode = rideAcceptNode ?: cardNodes.last()
         val acceptBounds = acceptNode.bounds
-        val isInsideScreen = acceptBounds.left >= 0 && acceptBounds.top >= 0 &&
-                acceptBounds.right <= screenBounds.right && acceptBounds.bottom <= screenBounds.bottom
-        val isActionable = acceptNode.isVisibleToUser && isInsideScreen
+        val centerX = acceptBounds.centerX()
+        val centerY = acceptBounds.centerY()
+        val centerInsideScreen = centerX >= screenBounds.left && centerX <= screenBounds.right &&
+                centerY >= screenBounds.top && centerY <= screenBounds.bottom
+        val isEnabled = acceptNode.node?.isEnabled ?: true
+        val isActionable = acceptNode.isVisibleToUser && isEnabled && centerInsideScreen
 
         val rawTextHash = computeHash("bharat_${rideType}_${baseFare}_${pickupAddress}_${dropAddress}")
         val rawCard = buildRawCardJson(cardNodes, layoutVariant, parseConfidence, parseReason)

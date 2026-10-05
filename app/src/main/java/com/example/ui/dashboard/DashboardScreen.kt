@@ -117,6 +117,7 @@ fun DashboardScreen(
     val alertOnAccept by viewModel.alertOnAccept.collectAsState()
     val soundEnabled by viewModel.soundEnabled.collectAsState()
     val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
+    val turboMode by viewModel.turboMode.collectAsState()
     val permissions by viewModel.permissions.collectAsState()
     val isFilterSavedRecently by viewModel.isFilterSavedRecently.collectAsState()
     val showDebugInfo by viewModel.showDebugInfo.collectAsState()
@@ -306,6 +307,48 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(text = "Stop", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "Turbo mode", color = colors.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            if (turboMode) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    color = colors.accent.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(4.dp),
+                                    border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.4f))
+                                ) {
+                                    Text(
+                                        text = "TURBO",
+                                        color = colors.accent,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Text(text = "uses a bit more battery", color = colors.textSecondary, fontSize = 10.5.sp)
+                    }
+                    Switch(
+                        checked = turboMode,
+                        onCheckedChange = viewModel::setTurboMode,
+                        modifier = Modifier.scale(0.78f),
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = colors.background,
+                            checkedTrackColor = colors.accent,
+                            uncheckedThumbColor = colors.textSecondary,
+                            uncheckedTrackColor = colors.surface2
+                        )
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

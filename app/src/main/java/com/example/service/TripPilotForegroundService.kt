@@ -1,15 +1,18 @@
 package com.example.service
 
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import com.example.TripPilotApp
+import com.example.util.TurboModeManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class TripPilotForegroundService : Service() {
@@ -35,7 +38,8 @@ class TripPilotForegroundService : Service() {
             } catch (_: Exception) {
                 // If service is not running or restricted
                 TripPilotApp.engineState.value = false
-                TripPilotApp.instance.appScope.launch(Dispatchers.IO) {
+                TurboModeManager.release()
+                CoroutineScope(Dispatchers.IO).launch {
                     TripPilotApp.instance.preferencesManager.setEngineEnabled(false)
                 }
             }
@@ -44,15 +48,35 @@ class TripPilotForegroundService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var overlayNotificationManager: OverlayNotificationManager
+    private lateinit var notificationManager: NotificationManager
 
     override fun onCreate() {
         super.onCreate()
         overlayNotificationManager = OverlayNotificationManager(this)
+        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Observe engine state and turbo mode to maintain wake lock and update notification
+        serviceScope.launch {
+            val app = TripPilotApp.instance
+            combine(
+                app.preferencesManager.engineEnabled,
+                app.preferencesManager.turboMode
+            ) { enabled, turbo ->
+                enabled to turbo
+            }.collect { (enabled, turbo) ->
+                TurboModeManager.updateWakeLock(this@TripPilotForegroundService, enabled, turbo)
+                if (enabled) {
+                    val notif = overlayNotificationManager.createForegroundNotification(isTurbo = turbo)
+                    notificationManager.notify(NOTIFICATION_ID, notif)
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             TripPilotApp.engineState.value = false
+            TurboModeManager.release()
             serviceScope.launch {
                 TripPilotApp.instance.preferencesManager.setEngineEnabled(false)
             }
@@ -61,9 +85,10 @@ class TripPilotForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        val notification = overlayNotificationManager.createForegroundNotification()
+        val notification = overlayNotificationManager.createForegroundNotification(isTurbo = true)
         startForeground(NOTIFICATION_ID, notification)
         TripPilotApp.engineState.value = true
+        TurboModeManager.updateWakeLock(this, engineRunning = true, turboEnabled = true)
         serviceScope.launch {
             TripPilotApp.instance.preferencesManager.setEngineEnabled(true)
         }
@@ -73,6 +98,7 @@ class TripPilotForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        TurboModeManager.release()
         serviceScope.cancel()
     }
 

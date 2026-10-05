@@ -37,7 +37,14 @@ data class RideLog(
     val parseConfidence: String = "HIGH", // "HIGH", "MEDIUM", "LOW"
     val parseReason: String? = null,
     val layoutVariant: String = "LIST", // "LIST", "SINGLE", "RAPIDO"
+    val firstSeenAt: Long = timestamp,
+    val lastSeenAt: Long = timestamp,
     val seenCount: Int = 1,
+    val eventLagMs: Long = 0,
+    val parseMs: Long = 0,
+    val decideMs: Long = 0,
+    val totalToTapMs: Long = 0,
+    val outcome: String? = null, // "ACCEPTED", "SKIPPED", "TAP_FAILED", "MISSED"
     val rawCard: String? = null,
     val fingerprint: String = ""
 )

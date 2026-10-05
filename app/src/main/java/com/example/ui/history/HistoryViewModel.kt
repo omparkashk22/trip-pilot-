@@ -21,6 +21,7 @@ import java.util.Calendar
 data class TodayRideStats(
     val acceptedCount: Int = 0,
     val skippedCount: Int = 0,
+    val missedCount: Int = 0,
     val totalAcceptedFare: Double = 0.0
 )
 
@@ -68,10 +69,14 @@ class HistoryViewModel(
 
         var accepted = 0
         var skipped = 0
+        var missed = 0
         var totalFare = 0.0
 
         for (log in logs) {
             if (log.timestamp >= startOfDay) {
+                if (log.outcome.equals("MISSED", ignoreCase = true)) {
+                    missed++
+                }
                 when (log.status.uppercase()) {
                     "ACCEPTED" -> {
                         accepted++
@@ -81,7 +86,7 @@ class HistoryViewModel(
                 }
             }
         }
-        TodayRideStats(accepted, skipped, totalFare)
+        TodayRideStats(accepted, skipped, missed, totalFare)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TodayRideStats())
 
     fun deleteLog(id: Long) {

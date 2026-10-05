@@ -70,6 +70,15 @@ class DashboardViewModel(
     val vibrationEnabled: StateFlow<Boolean> = preferencesManager.isVibrationEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val turboMode: StateFlow<Boolean> = preferencesManager.turboMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun setTurboMode(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setTurboMode(enabled)
+        }
+    }
+
     val driverFilter: StateFlow<DriverFilter> = filterRepository.filter
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DriverFilter())
 

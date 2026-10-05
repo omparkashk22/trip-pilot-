@@ -30,7 +30,7 @@ object RapidoParser {
     )
 
     // Distance regex: "1.7 km"
-    private val DIST_PATTERN = Pattern.compile("([0-9]+(?:\\.[0-9]+)?)\\s*(km|m)\\b", Pattern.CASE_INSENSITIVE)
+    internal val DIST_PATTERN = Pattern.compile("([0-9]+(?:\\.[0-9]+)?)\\s*(km|m)\\b", Pattern.CASE_INSENSITIVE)
 
     // Drop ETA regex: (12 mins) or (12 min)
     private val DROP_ETA_PATTERN = Pattern.compile("\\(\\s*([0-9]+)\\s*mins?\\s*\\)", Pattern.CASE_INSENSITIVE)
@@ -147,7 +147,8 @@ object RapidoParser {
             val text = n.text.trim()
 
             if (text.contains("/km", ignoreCase = true) || PER_KM_PATTERN.matcher(text).find() ||
-                text.startsWith("+") || EXTRA_FARE_PATTERN.matcher(text).find()
+                text.startsWith("+") || EXTRA_FARE_PATTERN.matcher(text).find() ||
+                BANNER_PATTERN.matcher(text).find()
             ) {
                 continue
             }
@@ -257,50 +258,47 @@ object RapidoParser {
             }
         }
 
-        // 5. Ride type detection order:
-        // (1) ride-type badge text (label above the fare)
-        // (2) contentDescription of vehicle icon near top
-        // (3) matching known list: "Cab Economy", "Cab Premium", "Cab XL", "Bike Boost", "Auto Boost", "Cab Boost", "Bike", "Auto", "Cab"
-        // (4) otherwise "Unknown"
+        // 5. Ride type detection using RideTypeSanitizer
+        val fareTop = cardNodes.getOrNull(chosenFareIdx)?.bounds?.top ?: Int.MAX_VALUE
+
+        // (1) Check nodes above the fare
         if (chosenFareIdx > 0) {
-            // Check nodes above the fare
             for (i in 0 until chosenFareIdx) {
                 val t = cardNodes[i].text.trim()
-                if (t.isNotEmpty() && !t.startsWith("₹") && !DIST_PATTERN.matcher(t).find() &&
-                    !t.equals("Go To", ignoreCase = true) && !t.equals("Stay In", ignoreCase = true)
-                ) {
-                    val matching = KNOWN_RIDE_TYPES.firstOrNull { t.equals(it, ignoreCase = true) || t.contains(it, ignoreCase = true) }
-                    if (matching != null) {
-                        rideType = t // Keep full badge text as rideType (e.g. "Bike Boost")
-                        break
-                    }
+                val isAboveFare = cardNodes[i].bounds.top < fareTop || i < chosenFareIdx
+                val sanitized = RideTypeSanitizer.sanitize(t, appId = "rapido", isAboveFareNode = isAboveFare)
+                if (sanitized != "Unknown") {
+                    rideType = sanitized
+                    break
                 }
             }
         }
 
+        // (2) Check contentDescription of vehicle icon near top
         if (rideType == "Unknown") {
-            // Check top nodes for contentDescription matching vehicle icon
             for (i in 0 until minOf(5, cardNodes.size)) {
                 val cd = cardNodes[i].node?.contentDescription?.toString()?.trim() ?: ""
-                if (cd.isNotEmpty()) {
-                    val matching = KNOWN_RIDE_TYPES.firstOrNull { cd.contains(it, ignoreCase = true) }
-                    if (matching != null) {
-                        rideType = matching
-                        break
-                    }
+                val sanitized = RideTypeSanitizer.sanitize(cd, appId = "rapido", isAboveFareNode = true)
+                if (sanitized != "Unknown") {
+                    rideType = sanitized
+                    break
                 }
             }
         }
 
+        // (3) Check known list in registry (longest match wins)
         if (rideType == "Unknown") {
-            // Check any text in the card matching known list from registry
-            for (known in KNOWN_RIDE_TYPES) {
-                val found = cardNodes.firstOrNull { it.text.contains(known, ignoreCase = true) }
+            for (known in RideTypeSanitizer.RAPIDO_KNOWN.sortedByDescending { it.length }) {
+                val found = cardNodes.firstOrNull { n ->
+                    val t = n.text.trim()
+                    !RideTypeSanitizer.isRejectedCandidate(t) && (t.equals(known, ignoreCase = true) || t.contains(known, ignoreCase = true))
+                }
                 if (found != null) {
-                    val pillText = found.text.trim()
-                    // Keep full pill text if it starts with the known ride type
-                    rideType = if (isLikelyRideTypePill(pillText)) pillText else known
-                    break
+                    val sanitized = RideTypeSanitizer.sanitize(found.text.trim(), appId = "rapido", isAboveFareNode = false)
+                    if (sanitized != "Unknown") {
+                        rideType = sanitized
+                        break
+                    }
                 }
             }
         }
@@ -362,19 +360,22 @@ object RapidoParser {
         val dropAddressTruncated = acceptBounds.bottom >= (screenBounds.bottom - 40)
 
         // Overlay intersection check
-        var intersectsOverlay = false
+        val centerX = acceptBounds.centerX()
+        val centerY = acceptBounds.centerY()
+        val centerInsideScreen = centerX >= screenBounds.left && centerX <= screenBounds.right &&
+                centerY >= screenBounds.top && centerY <= screenBounds.bottom
+        val isEnabled = acceptNode.node?.isEnabled ?: true
+
+        // Keep the overlap check only for a floating node that really covers the center point of the Accept button
+        var coversCenter = false
         for (overlay in overlayBoundsList) {
-            if (acceptBounds.left < overlay.right && overlay.left < acceptBounds.right &&
-                acceptBounds.top < overlay.bottom && overlay.top < acceptBounds.bottom
-            ) {
-                intersectsOverlay = true
+            if (overlay.contains(centerX, centerY)) {
+                coversCenter = true
                 break
             }
         }
 
-        val isInsideScreen = acceptBounds.left >= 0 && acceptBounds.top >= 0 &&
-                acceptBounds.right <= screenBounds.right && acceptBounds.bottom <= screenBounds.bottom
-        val isActionable = acceptNode.isVisibleToUser && isInsideScreen && !intersectsOverlay
+        val isActionable = acceptNode.isVisibleToUser && isEnabled && centerInsideScreen && !coversCenter
 
         val rawTextHash = computeHash("rapido_${rideType}_${baseFare}_${extraFare}_${pickupAddress}_${dropAddress}")
         val rawCard = buildRawCardJson(cardNodes, "RAPIDO", parseConfidence, parseReason)

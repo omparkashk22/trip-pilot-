@@ -50,6 +50,9 @@ class SettingsViewModel(
     val vibrationEnabled: StateFlow<Boolean> = preferencesManager.isVibrationEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val turboMode: StateFlow<Boolean> = preferencesManager.turboMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     val showDebugInfo: StateFlow<Boolean> = preferencesManager.showDebugInfo
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -145,6 +148,12 @@ class SettingsViewModel(
     fun setVibrationEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferencesManager.setVibrationEnabled(enabled)
+        }
+    }
+
+    fun setTurboMode(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setTurboMode(enabled)
         }
     }
 

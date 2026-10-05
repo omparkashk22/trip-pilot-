@@ -92,6 +92,7 @@ fun SettingsScreen(
     val showDebugInfo by viewModel.showDebugInfo.collectAsState()
     val soundEnabled by viewModel.soundEnabled.collectAsState()
     val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
+    val turboMode by viewModel.turboMode.collectAsState()
 
     val isCheckingForUpdate by viewModel.isCheckingForUpdate.collectAsState()
     val updateCheckResult by viewModel.updateCheckResult.collectAsState()
@@ -296,6 +297,29 @@ fun SettingsScreen(
                 Switch(
                     checked = keepScreenOn,
                     onCheckedChange = viewModel::setKeepScreenOn,
+                    modifier = Modifier.scale(0.82f),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = colors.background,
+                        checkedTrackColor = colors.accent,
+                        uncheckedThumbColor = colors.textSecondary,
+                        uncheckedTrackColor = colors.surface2
+                    )
+                )
+            }
+
+            // Turbo Mode (default ON)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Turbo mode", color = colors.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text(text = "Keeps CPU awake for instant tap; uses a bit more battery", color = colors.textSecondary, fontSize = 11.sp)
+                }
+                Switch(
+                    checked = turboMode,
+                    onCheckedChange = viewModel::setTurboMode,
                     modifier = Modifier.scale(0.82f),
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = colors.background,
