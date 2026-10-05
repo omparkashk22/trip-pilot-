@@ -78,3 +78,63 @@ For evaluation without Firebase credentials, drivers can tap **"Continue in Offl
    - Clickability of the node or its ancestors
    - Share button to export the raw dump file for parser adjustments.
 6. Alternatively, turn on **Capture on next offer** to automatically dump the tree the next time an offer appears.
+
+---
+
+## Release Builds & In-App Update Management
+
+TripPilot includes an automated in-app update checker that supports both GitHub Releases and hosted `version.json` endpoints.
+
+### 1. Versioning & Build Number Configuration
+The app version is strictly managed via integer build numbers:
+- `versionCode` = build number (integer). Set via the environment variable `BUILD_NUMBER` or `GITHUB_RUN_NUMBER`. If unset, Gradle falls back to the counter stored in `version.properties` (which automatically increments on release builds).
+- `versionName` = `"1.0.<versionCode>"` (e.g. `1.0.7`).
+- The `applicationId` remains constant (`com.aistudio.trippilot.vqxrt`).
+
+### 2. How to Tag a Release & Attach the APK
+To publish an update on GitHub that TripPilot can detect and install:
+1. Tag your commit using a build descriptor:
+   ```bash
+   git tag "build 7"
+   git push origin "build 7"
+   ```
+   *(Supported tag formats include: `"build 7"`, `"Build-7"`, `"build_7"`, `"v1.0.7"`, `"7"`, or `"release 7"`).*
+2. Build the signed release APK:
+   ```bash
+   BUILD_NUMBER=7 gradle assembleRelease
+   ```
+3. Create a GitHub Release for the tag and attach the release APK:
+   - Ensure the asset name ends with `.apk` (e.g., `app-release.apk` or `app-release-7.apk`).
+   - If desired, include a line in the release description body:
+     ```
+     versionCode: 7
+     ```
+4. Publish the release (TripPilot considers all non-draft releases; pre-releases are included by default).
+
+### 3. How the In-App Update Checker Reads Releases
+When checking GitHub Releases, TripPilot queries the releases endpoint (`/repos/<owner>/<repo>/releases`) with strict cache-busting headers (`Cache-Control: no-cache`, `Pragma: no-cache`, `Accept: application/vnd.github+json`) and parses the remote build integer in this exact priority order:
+1. `versionCode: N` defined in the release body text.
+2. `(?i)build[\s_-]*(\d+)` regex on `tag_name`, then on release `name`.
+3. `(?i)release[\s_-]*(\d+)` regex on `tag_name`, then on release `name`.
+4. Trailing integer `(\d+)\s*$` on `tag_name` or `name`.
+5. Embedded integer in the APK asset filename (e.g., `app-release-7.apk`).
+
+TripPilot evaluates all eligible releases, selects the release with the **highest parsed build number** (not merely the latest by date), and compares:
+$$\text{updateAvailable} = \text{remoteBuild} > \text{installedVersionCode}$$
+
+If the tag cannot be parsed (e.g. `"latest"`), TripPilot transitions to the `ERROR` state with an explanatory message, never falsely claiming `"up to date"`.
+
+### 4. Hosted `version.json` Alternative
+TripPilot can also read updates from a hosted JSON file with the following format:
+```json
+{
+  "versionCode": 7,
+  "versionName": "1.0.7",
+  "apkUrl": "https://example.com/downloads/app-release-7.apk",
+  "sha256": "abcdef1234567890...",
+  "notes": "Bug fixes and faster accept response",
+  "minSupportedVersionCode": 1
+}
+```
+Requests to `version.json` automatically include a cache-busting timestamp parameter (`?t=<millis>`).
+

@@ -75,25 +75,74 @@ class SettingsViewModel(
     val isCheckingForUpdate = MutableStateFlow(false)
     val updateCheckResult = MutableStateFlow<String?>(null)
     val latestUpdateInfo = MutableStateFlow<com.example.data.remote.AppUpdateInfo?>(null)
+    val lastCheckedTime = MutableStateFlow<String?>(null)
+    val isDiagnosticsExpanded = MutableStateFlow(false)
+    val downloadProgress = MutableStateFlow<Float?>(null)
+    val downloadStatusMessage = MutableStateFlow<String?>(null)
+    val downloadedApkFile = MutableStateFlow<File?>(null)
+    val installErrorMessage = MutableStateFlow<String?>(null)
+    val clipboardMessage = MutableStateFlow<String?>(null)
 
-    fun checkForUpdates() {
+    val includePreReleases: StateFlow<Boolean> = preferencesManager.includePreReleases
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val updateSourceType: StateFlow<String> = preferencesManager.updateSourceType
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "GITHUB")
+
+    fun setIncludePreReleases(include: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setIncludePreReleases(include)
+        }
+    }
+
+    fun setUpdateSourceType(type: String) {
+        viewModelScope.launch {
+            preferencesManager.setUpdateSourceType(type)
+        }
+    }
+
+    fun toggleDiagnostics() {
+        isDiagnosticsExpanded.value = !isDiagnosticsExpanded.value
+    }
+
+    fun checkForUpdates(context: Context? = null) {
         if (isCheckingForUpdate.value) return
         viewModelScope.launch {
             isCheckingForUpdate.value = true
             updateCheckResult.value = null
+            installErrorMessage.value = null
             try {
                 val checker = com.example.data.remote.VersionChecker()
-                val info = checker.checkLatestRelease(com.example.BuildConfig.VERSION_NAME)
-                if (info != null && info.isUpdateAvailable) {
-                    latestUpdateInfo.value = info
-                    com.example.TripPilotApp.updateInfoLive.value = info
-                    updateCheckResult.value = "New version available: v${info.latestVersion}"
-                } else if (info != null) {
-                    latestUpdateInfo.value = null
-                    updateCheckResult.value = "TripPilot is up to date (v${com.example.BuildConfig.VERSION_NAME})"
+                val isPre = includePreReleases.first()
+                val src = if (updateSourceType.first() == "HOSTED_JSON") {
+                    com.example.data.remote.UpdateSourceType.HOSTED_JSON
                 } else {
-                    latestUpdateInfo.value = null
-                    updateCheckResult.value = "Unable to reach GitHub. Check internet connection."
+                    com.example.data.remote.UpdateSourceType.GITHUB
+                }
+
+                val info = checker.checkUpdate(
+                    context = context,
+                    sourceType = src,
+                    includePreReleases = isPre
+                )
+                latestUpdateInfo.value = info
+
+                val timeFmt = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
+                lastCheckedTime.value = timeFmt.format(java.util.Date())
+
+                when (info.status) {
+                    com.example.data.remote.UpdateResultState.UPDATE_AVAILABLE -> {
+                        com.example.TripPilotApp.updateInfoLive.value = info
+                        updateCheckResult.value = "New version available: v${info.latestVersion} (build ${info.remoteBuild})"
+                    }
+                    com.example.data.remote.UpdateResultState.UP_TO_DATE -> {
+                        com.example.TripPilotApp.updateInfoLive.value = null
+                        updateCheckResult.value = "You have the latest version (build ${info.installedBuild})"
+                    }
+                    com.example.data.remote.UpdateResultState.ERROR -> {
+                        com.example.TripPilotApp.updateInfoLive.value = null
+                        updateCheckResult.value = info.errorMessage ?: "Update check encountered an error"
+                    }
                 }
             } catch (e: Exception) {
                 updateCheckResult.value = "Check failed: ${e.message}"
@@ -101,6 +150,86 @@ class SettingsViewModel(
                 isCheckingForUpdate.value = false
             }
         }
+    }
+
+    fun downloadAndInstallUpdate(context: Context) {
+        val info = latestUpdateInfo.value ?: return
+        if (info.downloadUrl.isBlank()) return
+
+        val cached = downloadedApkFile.value
+        if (cached != null && cached.exists() && cached.length() > 0) {
+            triggerInstall(context, cached)
+            return
+        }
+
+        viewModelScope.launch {
+            downloadProgress.value = 0f
+            downloadStatusMessage.value = "Starting download..."
+            installErrorMessage.value = null
+
+            try {
+                val apkFile = com.example.data.remote.AppUpdateInstaller.downloadApk(
+                    context = context,
+                    downloadUrl = info.downloadUrl,
+                    expectedSizeBytes = if (info.apkSizeBytes > 0) info.apkSizeBytes else null,
+                    expectedSha256 = info.sha256
+                ) { downloaded, total, pct ->
+                    downloadProgress.value = pct / 100f
+                    val dlMb = downloaded / (1024f * 1024f)
+                    if (total > 0) {
+                        val totMb = total / (1024f * 1024f)
+                        downloadStatusMessage.value = String.format(java.util.Locale.US, "Downloading: %.1f MB / %.1f MB (%d%%)", dlMb, totMb, pct)
+                    } else {
+                        downloadStatusMessage.value = String.format(java.util.Locale.US, "Downloading: %.1f MB", dlMb)
+                    }
+                }
+
+                downloadedApkFile.value = apkFile
+                downloadProgress.value = null
+                downloadStatusMessage.value = "Download complete"
+
+                triggerInstall(context, apkFile)
+            } catch (e: Exception) {
+                downloadProgress.value = null
+                downloadStatusMessage.value = null
+                installErrorMessage.value = "Download failed: ${e.message}"
+            }
+        }
+    }
+
+    private fun triggerInstall(context: Context, apkFile: File) {
+        val res = com.example.data.remote.AppUpdateInstaller.triggerInstall(context, apkFile)
+        when (res) {
+            is com.example.data.remote.InstallResult.Success -> {
+                installErrorMessage.value = null
+            }
+            is com.example.data.remote.InstallResult.PermissionRequired -> {
+                installErrorMessage.value = "Permission required: Please enable 'Allow from this source' to install updates."
+                com.example.data.remote.AppUpdateInstaller.openInstallPermissionSettings(context)
+            }
+            is com.example.data.remote.InstallResult.Error -> {
+                installErrorMessage.value = res.message
+            }
+        }
+    }
+
+    fun resumeInstallAfterPermission(context: Context) {
+        val file = downloadedApkFile.value
+        if (file != null && file.exists() && com.example.data.remote.AppUpdateInstaller.canRequestInstalls(context)) {
+            triggerInstall(context, file)
+        }
+    }
+
+    fun copyDiagnostics(context: Context) {
+        val raw = latestUpdateInfo.value?.diagnostics?.rawText ?: "No diagnostics available. Please run an update check first."
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("TripPilot Diagnostics", raw)
+        clipboard.setPrimaryClip(clip)
+        clipboardMessage.value = "Diagnostics copied to clipboard"
+    }
+
+    fun clearClipboardMessage() {
+        clipboardMessage.value = null
     }
 
     fun setLanguage(code: String) {

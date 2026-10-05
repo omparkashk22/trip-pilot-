@@ -98,19 +98,26 @@ class TripPilotApp : Application() {
             } catch (_: Exception) {}
         }
 
-        // Periodic GitHub version check (on startup and every 6 hours)
+        // Automatic update check once per app start (silent, no toast unless an update exists)
         appScope.launch(Dispatchers.IO) {
             val versionChecker = com.example.data.remote.VersionChecker()
-            while (isActive) {
-                try {
-                    val info = versionChecker.checkLatestRelease(BuildConfig.VERSION_NAME)
-                    if (info != null && info.isUpdateAvailable) {
-                        updateInfoLive.value = info
-                    }
-                } catch (e: Exception) {
-                    AppLogger.w("TripPilotApp", "Version check failed: ${e.message}")
+            try {
+                val isPre = preferencesManager.includePreReleases.first()
+                val srcType = if (preferencesManager.updateSourceType.first() == "HOSTED_JSON") {
+                    com.example.data.remote.UpdateSourceType.HOSTED_JSON
+                } else {
+                    com.example.data.remote.UpdateSourceType.GITHUB
                 }
-                kotlinx.coroutines.delay(6 * 3600 * 1000L)
+                val info = versionChecker.checkUpdate(
+                    context = this@TripPilotApp,
+                    sourceType = srcType,
+                    includePreReleases = isPre
+                )
+                if (info.isUpdateAvailable) {
+                    updateInfoLive.value = info
+                }
+            } catch (e: Exception) {
+                AppLogger.w("TripPilotApp", "Silent startup version check failed: ${e.message}")
             }
         }
 

@@ -38,11 +38,17 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -51,6 +57,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +73,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -97,6 +105,28 @@ fun SettingsScreen(
     val isCheckingForUpdate by viewModel.isCheckingForUpdate.collectAsState()
     val updateCheckResult by viewModel.updateCheckResult.collectAsState()
     val latestUpdateInfo by viewModel.latestUpdateInfo.collectAsState()
+    val lastCheckedTime by viewModel.lastCheckedTime.collectAsState()
+    val isDiagnosticsExpanded by viewModel.isDiagnosticsExpanded.collectAsState()
+    val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val downloadStatusMessage by viewModel.downloadStatusMessage.collectAsState()
+    val installErrorMessage by viewModel.installErrorMessage.collectAsState()
+    val clipboardMessage by viewModel.clipboardMessage.collectAsState()
+    val includePreReleases by viewModel.includePreReleases.collectAsState()
+    val updateSourceType by viewModel.updateSourceType.collectAsState()
+
+    val installedVersionCode = remember { com.example.data.remote.VersionChecker.getInstalledVersionCode(context) }
+    val installedVersionName = remember { com.example.data.remote.VersionChecker.getInstalledVersionName(context) }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.resumeInstallAfterPermission(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var showLangDialog by remember { mutableStateOf(false) }
     var showTapMethodDialog by remember { mutableStateOf(false) }
@@ -403,17 +433,80 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
+            // Installed version
             Text(
-                text = stringResource(R.string.version_label),
+                text = "Installed: $installedVersionName (build $installedVersionCode)",
+                color = colors.text,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            // Latest version (after a check)
+            if (latestUpdateInfo != null && latestUpdateInfo?.status != com.example.data.remote.UpdateResultState.ERROR) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Latest: build ${latestUpdateInfo?.remoteBuild}",
+                    color = colors.accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            // Last checked time
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "Last checked: ${lastCheckedTime ?: "Never"}",
+                color = colors.textSecondary,
+                fontSize = 11.sp
+            )
+
+            // Source name
+            Spacer(modifier = Modifier.height(2.dp))
+            val sourceDisplayName = if (updateSourceType == "HOSTED_JSON") {
+                "Hosted version.json"
+            } else {
+                "GitHub Releases (${com.example.BuildConfig.GITHUB_OWNER}/${com.example.BuildConfig.GITHUB_REPO})"
+            }
+            Text(
+                text = "Source: $sourceDisplayName",
                 color = colors.textSecondary,
                 fontSize = 11.sp
             )
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            // Options: Pre-releases toggle and Source toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = includePreReleases,
+                        onCheckedChange = { viewModel.setIncludePreReleases(it) },
+                        colors = CheckboxDefaults.colors(checkedColor = colors.accent)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Include pre-releases", fontSize = 11.sp, color = colors.text)
+                }
+
+                Text(
+                    text = if (updateSourceType == "GITHUB") "Use JSON" else "Use GitHub",
+                    fontSize = 11.sp,
+                    color = colors.accent,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable {
+                        viewModel.setUpdateSourceType(if (updateSourceType == "GITHUB") "HOSTED_JSON" else "GITHUB")
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             // Check for Updates button
             OutlinedButton(
-                onClick = viewModel::checkForUpdates,
+                onClick = { viewModel.checkForUpdates(context) },
                 enabled = !isCheckingForUpdate,
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, colors.accent),
@@ -433,7 +526,7 @@ fun SettingsScreen(
                         strokeWidth = 2.dp
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Checking GitHub...", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Checking for updates...", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 } else {
                     Icon(
                         imageVector = Icons.Default.SystemUpdate,
@@ -447,32 +540,63 @@ fun SettingsScreen(
 
             if (updateCheckResult != null) {
                 Spacer(modifier = Modifier.height(8.dp))
+                val isError = latestUpdateInfo?.status == com.example.data.remote.UpdateResultState.ERROR
+                val isUpdateAvailable = latestUpdateInfo?.status == com.example.data.remote.UpdateResultState.UPDATE_AVAILABLE
+
                 Surface(
-                    color = if (latestUpdateInfo != null) colors.accent.copy(alpha = 0.12f) else colors.surface2,
+                    color = when {
+                        isError -> colors.danger.copy(alpha = 0.12f)
+                        isUpdateAvailable -> colors.accent.copy(alpha = 0.12f)
+                        else -> colors.surface2
+                    },
                     shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, if (latestUpdateInfo != null) colors.accent.copy(alpha = 0.4f) else colors.hairline),
+                    border = BorderStroke(
+                        1.dp,
+                        when {
+                            isError -> colors.danger.copy(alpha = 0.4f)
+                            isUpdateAvailable -> colors.accent.copy(alpha = 0.4f)
+                            else -> colors.hairline
+                        }
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
                             text = updateCheckResult.orEmpty(),
-                            color = if (latestUpdateInfo != null) colors.accent else colors.textSecondary,
+                            color = when {
+                                isError -> colors.danger
+                                isUpdateAvailable -> colors.accent
+                                else -> colors.text
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
 
-                        if (latestUpdateInfo != null) {
+                        if (isUpdateAvailable && latestUpdateInfo != null) {
+                            val info = latestUpdateInfo!!
+                            if (info.releaseNotes.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = info.releaseNotes,
+                                    color = colors.textSecondary,
+                                    fontSize = 11.sp,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (info.apkSizeBytes > 0) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Size: ${com.example.data.remote.VersionChecker.formatFileSize(info.apkSizeBytes)}",
+                                    color = colors.textSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
-                                onClick = {
-                                    val url = latestUpdateInfo?.downloadUrl ?: latestUpdateInfo?.releasePageUrl ?: ""
-                                    if (url.isNotEmpty()) {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                        }
-                                        try { context.startActivity(intent) } catch (_: Exception) {}
-                                    }
-                                },
+                                onClick = { viewModel.downloadAndInstallUpdate(context) },
+                                enabled = downloadProgress == null,
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = colors.accent,
@@ -480,13 +604,124 @@ fun SettingsScreen(
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(36.dp)
+                                    .height(38.dp)
                                     .testTag("download_update_button_settings")
                             ) {
                                 Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Download APK (v${latestUpdateInfo?.latestVersion})", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Download & Install (v${info.latestVersion})", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
+
+                            if (downloadProgress != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                LinearProgressIndicator(
+                                    progress = { downloadProgress ?: 0f },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = colors.accent,
+                                    trackColor = colors.surface
+                                )
+                                if (downloadStatusMessage != null) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = downloadStatusMessage.orEmpty(),
+                                        color = colors.accent,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        if (installErrorMessage != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = installErrorMessage.orEmpty(),
+                                color = colors.danger,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Diagnostics Section
+            val diag = latestUpdateInfo?.diagnostics
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                color = colors.surface2,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, colors.hairline),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.toggleDiagnostics() },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Diagnostics",
+                            color = colors.text,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(
+                            imageVector = if (isDiagnosticsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isDiagnosticsExpanded) "Collapse" else "Expand",
+                            tint = colors.textSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    if (isDiagnosticsExpanded) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (diag != null) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Source URL: ${diag.sourceUrl}", fontSize = 10.sp, color = colors.textSecondary)
+                                Text("HTTP Status: ${diag.httpStatus}", fontSize = 10.sp, color = colors.textSecondary)
+                                Text("Releases Found: ${diag.releasesFound}", fontSize = 10.sp, color = colors.textSecondary)
+                                Text("Tags Found: ${if (diag.tagsFound.isEmpty()) "None" else diag.tagsFound.joinToString(", ")}", fontSize = 10.sp, color = colors.textSecondary)
+                                val parsedStr = diag.parsedBuilds.joinToString(", ") { "${it.first}: ${it.second ?: "unparsed"}" }
+                                Text("Parsed Builds: [${if (parsedStr.isEmpty()) "None" else parsedStr}]", fontSize = 10.sp, color = colors.textSecondary)
+                                Text("Chosen Release: ${diag.chosenRelease ?: "None"}", fontSize = 10.sp, color = colors.textSecondary)
+                                Text("Chosen Asset: ${diag.chosenAsset ?: "None"}", fontSize = 10.sp, color = colors.textSecondary)
+                                Text("Comparison: ${diag.comparison}", fontSize = 10.sp, color = if (diag.isUpdateAvailable) colors.accent else colors.textSecondary, fontWeight = FontWeight.Bold)
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                OutlinedButton(
+                                    onClick = { viewModel.copyDiagnostics(context) },
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, colors.accent),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.accent),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(32.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Copy diagnostics", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                }
+
+                                if (clipboardMessage != null) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = clipboardMessage.orEmpty(),
+                                        color = colors.accent,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "Run 'Check for Updates' to view network diagnostics.",
+                                color = colors.textSecondary,
+                                fontSize = 11.sp
+                            )
                         }
                     }
                 }

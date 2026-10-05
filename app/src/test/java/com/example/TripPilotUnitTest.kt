@@ -29,6 +29,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -1773,6 +1775,226 @@ class TripPilotUnitTest {
 
         println("Part 13 Benchmark: median=${medianMs}ms, p95=${p95Ms}ms")
         assertTrue("Fast path parse + decide target median < 20 ms, actual: ${medianMs}ms", medianMs < 20)
+    }
+
+    // =========================================================================
+    // PART 14: IN-APP UPDATE CHECK TESTS
+    // =========================================================================
+
+    @Test
+    fun testPart14_tagParsing_exactCases() {
+        // Tag parsing: "build 6" -> 6, "Build-6" -> 6, "build_6" -> 6, "v1.0.6" -> 6, "6" -> 6, "release 12 (final)" -> 12, "latest" -> ERROR
+        assertEquals(6L, com.example.data.remote.VersionChecker.parseBuildNumber(tag = "build 6"))
+        assertEquals(6L, com.example.data.remote.VersionChecker.parseBuildNumber(tag = "Build-6"))
+        assertEquals(6L, com.example.data.remote.VersionChecker.parseBuildNumber(tag = "build_6"))
+        assertEquals(6L, com.example.data.remote.VersionChecker.parseBuildNumber(tag = "v1.0.6"))
+        assertEquals(6L, com.example.data.remote.VersionChecker.parseBuildNumber(tag = "6"))
+        assertEquals(12L, com.example.data.remote.VersionChecker.parseBuildNumber(tag = "release 12 (final)"))
+        assertNull("Tag 'latest' without build numbers must return null (ERROR)", com.example.data.remote.VersionChecker.parseBuildNumber(tag = "latest"))
+
+        // Body override takes precedence: versionCode: N
+        assertEquals(99L, com.example.data.remote.VersionChecker.parseBuildNumber(tag = "build 6", body = "versionCode: 99"))
+
+        // APK asset name fallback
+        assertEquals(8L, com.example.data.remote.VersionChecker.parseBuildNumber(tag = "release", assetNames = listOf("app-release-8.apk")))
+    }
+
+    @Test
+    fun testPart14_comparison_exactCases() {
+        // Comparison: installed 5 vs remote 6 -> UPDATE_AVAILABLE; installed 6 vs remote 6 -> UP_TO_DATE; installed 7 vs remote 6 -> UP_TO_DATE
+        assertEquals(
+            com.example.data.remote.UpdateResultState.UPDATE_AVAILABLE,
+            com.example.data.remote.VersionChecker.compareVersions(installedCode = 5L, remoteCode = 6L)
+        )
+        assertEquals(
+            com.example.data.remote.UpdateResultState.UP_TO_DATE,
+            com.example.data.remote.VersionChecker.compareVersions(installedCode = 6L, remoteCode = 6L)
+        )
+        assertEquals(
+            com.example.data.remote.UpdateResultState.UP_TO_DATE,
+            com.example.data.remote.VersionChecker.compareVersions(installedCode = 7L, remoteCode = 6L)
+        )
+    }
+
+    @Test
+    fun testPart14_draftsIgnored_highestBuildWins_and_preReleases() {
+        // Mock releases JSON with draft, prerelease, and different publication orders
+        val releasesJson = """
+            [
+                {
+                    "tag_name": "build 10",
+                    "draft": true,
+                    "prerelease": false,
+                    "assets": [{"name": "app-release-10.apk", "browser_download_url": "https://example.com/10.apk", "size": 12000}]
+                },
+                {
+                    "tag_name": "build 8",
+                    "draft": false,
+                    "prerelease": true,
+                    "published_at": "2026-10-02T10:00:00Z",
+                    "assets": [{"name": "app-release-8.apk", "browser_download_url": "https://example.com/8.apk", "size": 12000}]
+                },
+                {
+                    "tag_name": "build 6",
+                    "draft": false,
+                    "prerelease": false,
+                    "published_at": "2026-10-04T10:00:00Z",
+                    "assets": [{"name": "app-release-6.apk", "browser_download_url": "https://example.com/6.apk", "size": 12000}]
+                }
+            ]
+        """.trimIndent()
+
+        // Test with pre-releases included: highest non-draft build is 8 (draft 10 is ignored)
+        val mockClientWithPrerelease = okhttp3.OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                okhttp3.Response.Builder()
+                    .request(chain.request())
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(releasesJson.toResponseBody("application/json".toMediaTypeOrNull()))
+                    .build()
+            }.build()
+
+        val checkerPrerelease = com.example.data.remote.VersionChecker(client = mockClientWithPrerelease)
+        runBlocking {
+            val result = checkerPrerelease.checkUpdate(
+                sourceType = com.example.data.remote.UpdateSourceType.GITHUB,
+                includePreReleases = true,
+                customInstalledBuild = 5L
+            )
+            assertEquals(com.example.data.remote.UpdateResultState.UPDATE_AVAILABLE, result.status)
+            assertEquals(8L, result.remoteBuild)
+            assertEquals("build 8", result.releaseTitle)
+        }
+
+        // Test with pre-releases excluded: highest non-draft, non-prerelease build is 6
+        val checkerNoPrerelease = com.example.data.remote.VersionChecker(client = mockClientWithPrerelease)
+        runBlocking {
+            val result = checkerNoPrerelease.checkUpdate(
+                sourceType = com.example.data.remote.UpdateSourceType.GITHUB,
+                includePreReleases = false,
+                customInstalledBuild = 5L
+            )
+            assertEquals(com.example.data.remote.UpdateResultState.UPDATE_AVAILABLE, result.status)
+            assertEquals(6L, result.remoteBuild)
+            assertEquals("build 6", result.releaseTitle)
+        }
+    }
+
+    @Test
+    fun testPart14_errorStates_neverUpToDate() {
+        // 1. HTTP 404 (Private repo or not found)
+        val mockClient404 = okhttp3.OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                okhttp3.Response.Builder()
+                    .request(chain.request())
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(404)
+                    .message("Not Found")
+                    .body("{\"message\": \"Not Found\"}".toResponseBody("application/json".toMediaTypeOrNull()))
+                    .build()
+            }.build()
+
+        val checker404 = com.example.data.remote.VersionChecker(client = mockClient404)
+        runBlocking {
+            val res = checker404.checkUpdate(customInstalledBuild = 5L)
+            assertEquals(com.example.data.remote.UpdateResultState.ERROR, res.status)
+            assertFalse("An error state must NEVER show update available or latest", res.isUpdateAvailable)
+            assertTrue("Expected private repo error message", res.errorMessage?.contains("private or not found") == true)
+        }
+
+        // 2. HTTP 403 Rate Limit
+        val mockClient403 = okhttp3.OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                okhttp3.Response.Builder()
+                    .request(chain.request())
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(403)
+                    .message("Forbidden")
+                    .header("x-ratelimit-reset", "1790000000")
+                    .body("{\"message\": \"API rate limit exceeded\"}".toResponseBody("application/json".toMediaTypeOrNull()))
+                    .build()
+            }.build()
+
+        val checker403 = com.example.data.remote.VersionChecker(client = mockClient403)
+        runBlocking {
+            val res = checker403.checkUpdate(customInstalledBuild = 5L)
+            assertEquals(com.example.data.remote.UpdateResultState.ERROR, res.status)
+            assertTrue("Expected rate limit message", res.errorMessage?.contains("rate limit") == true)
+        }
+
+        // 3. Invalid JSON
+        val mockClientInvalidJson = okhttp3.OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                okhttp3.Response.Builder()
+                    .request(chain.request())
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body("<html>502 Bad Gateway</html>".toResponseBody("text/html".toMediaTypeOrNull()))
+                    .build()
+            }.build()
+
+        val checkerInvalidJson = com.example.data.remote.VersionChecker(client = mockClientInvalidJson)
+        runBlocking {
+            val res = checkerInvalidJson.checkUpdate(customInstalledBuild = 5L)
+            assertEquals(com.example.data.remote.UpdateResultState.ERROR, res.status)
+            assertFalse(res.isUpdateAvailable)
+        }
+    }
+
+    @Test
+    fun testPart14_requestHeaders_and_cacheBusting() {
+        var capturedGitHubRequest: okhttp3.Request? = null
+        val mockClient = okhttp3.OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                capturedGitHubRequest = req
+                okhttp3.Response.Builder()
+                    .request(req)
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body("[]".toResponseBody("application/json".toMediaTypeOrNull()))
+                    .build()
+            }.build()
+
+        val checker = com.example.data.remote.VersionChecker(client = mockClient)
+        runBlocking {
+            checker.checkUpdate(sourceType = com.example.data.remote.UpdateSourceType.GITHUB)
+        }
+
+        assertNotNull(capturedGitHubRequest)
+        assertEquals("no-cache", capturedGitHubRequest!!.header("Cache-Control"))
+        assertEquals("no-cache", capturedGitHubRequest!!.header("Pragma"))
+        assertEquals("application/vnd.github+json", capturedGitHubRequest!!.header("Accept"))
+        assertEquals("TripPilot-Android-App", capturedGitHubRequest!!.header("User-Agent"))
+
+        // Test version.json cache busting query parameter ?t=
+        var capturedJsonRequest: okhttp3.Request? = null
+        val mockJsonClient = okhttp3.OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                capturedJsonRequest = req
+                val jsonBody = """{"versionCode": 6, "versionName": "1.0.6", "apkUrl": "https://example.com/app.apk"}"""
+                okhttp3.Response.Builder()
+                    .request(req)
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(jsonBody.toResponseBody("application/json".toMediaTypeOrNull()))
+                    .build()
+            }.build()
+
+        val checkerJson = com.example.data.remote.VersionChecker(hostedJsonUrl = "https://example.com/version.json", client = mockJsonClient)
+        runBlocking {
+            checkerJson.checkUpdate(sourceType = com.example.data.remote.UpdateSourceType.HOSTED_JSON)
+        }
+
+        assertNotNull(capturedJsonRequest)
+        val url = capturedJsonRequest!!.url.toString()
+        assertTrue("version.json request must contain cache-busting ?t= parameter", url.contains("?t=") || url.contains("&t="))
     }
 }
 

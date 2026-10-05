@@ -65,6 +65,24 @@ class PreferencesManager(private val context: Context) {
         val KEY_CAPTURE_ON_NEXT_OFFER = booleanPreferencesKey("capture_on_next_offer")
         val KEY_STRATEGY_STATS_JSON = stringPreferencesKey("strategy_stats_json")
         val KEY_TURBO_MODE = booleanPreferencesKey("turbo_mode")
+        val KEY_INCLUDE_PRERELEASES = booleanPreferencesKey("include_prereleases")
+        val KEY_UPDATE_SOURCE_TYPE = stringPreferencesKey("update_source_type")
+    }
+
+    val includePreReleases: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_INCLUDE_PRERELEASES] ?: true
+    }.distinctUntilChanged()
+
+    suspend fun setIncludePreReleases(include: Boolean) {
+        context.dataStore.edit { it[KEY_INCLUDE_PRERELEASES] = include }
+    }
+
+    val updateSourceType: Flow<String> = context.dataStore.data.map {
+        it[KEY_UPDATE_SOURCE_TYPE] ?: "GITHUB"
+    }.distinctUntilChanged()
+
+    suspend fun setUpdateSourceType(type: String) {
+        context.dataStore.edit { it[KEY_UPDATE_SOURCE_TYPE] = type }
     }
 
     val turboMode: Flow<Boolean> = context.dataStore.data.map {

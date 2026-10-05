@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -6,6 +7,28 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
+}
+
+val versionPropsFile = rootProject.file("version.properties")
+val versionProps = Properties()
+if (versionPropsFile.exists()) {
+  versionPropsFile.inputStream().use { versionProps.load(it) }
+}
+
+val envBuildNumber = System.getenv("BUILD_NUMBER") ?: System.getenv("GITHUB_RUN_NUMBER")
+val buildNumberVal: Int = envBuildNumber?.toIntOrNull()
+  ?: versionProps.getProperty("buildNumber", "1").toIntOrNull()
+  ?: 1
+
+gradle.taskGraph.whenReady {
+  val isReleaseTask = allTasks.any { it.name.contains("Release", ignoreCase = true) }
+  if (isReleaseTask && envBuildNumber == null && versionPropsFile.exists()) {
+    val nextBuild = buildNumberVal + 1
+    versionProps.setProperty("buildNumber", nextBuild.toString())
+    versionPropsFile.outputStream().use {
+      versionProps.store(it, "Updated by release build")
+    }
+  }
 }
 
 android {
@@ -16,19 +39,47 @@ android {
     applicationId = "com.aistudio.trippilot.vqxrt"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = buildNumberVal
+    versionName = "1.0.$buildNumberVal"
+
+    buildConfigField("String", "DEFAULT_UPDATE_SOURCE", "\"GITHUB\"")
+    buildConfigField("String", "GITHUB_OWNER", "\"omparkashk22\"")
+    buildConfigField("String", "GITHUB_REPO", "\"trip-pilot-\"")
+    buildConfigField("String", "HOSTED_VERSION_JSON_URL", "\"https://raw.githubusercontent.com/omparkashk22/trip-pilot-/main/version.json\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      val localPropsFile = rootProject.file("local.properties")
+      val localProps = Properties()
+      if (localPropsFile.exists()) {
+        localPropsFile.inputStream().use { localProps.load(it) }
+      }
+      val keystorePath = System.getenv("KEYSTORE_PATH")
+        ?: localProps.getProperty("KEYSTORE_PATH")
+        ?: "${rootDir}/my-upload-key.jks"
+      val storePasswordVal = System.getenv("STORE_PASSWORD")
+        ?: localProps.getProperty("STORE_PASSWORD")
+      val keyAliasVal = System.getenv("KEY_ALIAS")
+        ?: localProps.getProperty("KEY_ALIAS")
+        ?: "upload"
+      val keyPasswordVal = System.getenv("KEY_PASSWORD")
+        ?: localProps.getProperty("KEY_PASSWORD")
+
+      val keyFile = file(keystorePath)
+      if (keyFile.exists() && !storePasswordVal.isNullOrBlank()) {
+        storeFile = keyFile
+        storePassword = storePasswordVal
+        keyAlias = keyAliasVal
+        keyPassword = keyPasswordVal
+      } else {
+        storeFile = file("${rootDir}/debug.keystore")
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
